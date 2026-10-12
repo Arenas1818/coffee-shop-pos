@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import RegisterFinancialActivity from "./register-financial-activity";
 
 const categories = ["All", "Coffee", "Non-Coffee", "Tea", "Bakery"] as const;
 type Category = (typeof categories)[number];
@@ -45,6 +46,26 @@ type CartItem = {
   product: Product;
   size: "regular" | "large";
   quantity: number;
+};
+
+type PaymentMethod = "cash" | "card" | "e_wallet";
+
+type Receipt = {
+  orderId: string;
+  items: CartItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  paymentMethod: PaymentMethod;
+  amountReceived: number;
+  changeDue: number;
+  completedAt: Date;
+};
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  card: "Card",
+  e_wallet: "E-wallet",
 };
 
 function parseProducts(rows: unknown): Product[] {
@@ -120,7 +141,9 @@ export default function PosClient({
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [sizeSelection, setSizeSelection] = useState<Product | null>(null);
-  const [orderMessage, setOrderMessage] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [amountReceived, setAmountReceived] = useState("");
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [orderError, setOrderError] = useState("");
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
@@ -175,11 +198,16 @@ export default function PosClient({
         item.quantity,
     0,
   );
-  const tax = subtotal * 0.08;
+  const tax = Math.round((subtotal * 0.08 + Number.EPSILON) * 100) / 100;
   const total = subtotal + tax;
+  const cashAmountReceived = Number(amountReceived);
+  const isPaymentValid =
+    paymentMethod !== "cash" ||
+    (amountReceived.trim() !== "" &&
+      Number.isFinite(cashAmountReceived) &&
+      cashAmountReceived >= total);
 
   function addToCart(product: Product, size: "regular" | "large" = "regular") {
-    setOrderMessage("");
     setCart((currentCart) => {
       const existingItem = currentCart.find(
         (item) => item.product.id === product.id && item.size === size,
@@ -213,21 +241,51 @@ export default function PosClient({
 
   async function placeOrder() {
     if (cart.length === 0) return;
+    if (!isPaymentValid) {
+      setOrderError("Enter an amount received that covers the order total.");
+      return;
+    }
+
     setIsSavingOrder(true);
-    setOrderMessage("");
     setOrderError("");
     try {
       const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.rpc("place_order", {
+      const paymentReceived =
+        paymentMethod === "cash" ? cashAmountReceived : total;
+      const { data: orderId, error } = await supabase.rpc("complete_order", {
         p_items: cart.map(({ product, quantity, size }) => ({
           product_id: product.id,
           variant: size,
           quantity,
         })),
+        p_payment_method: paymentMethod,
+        p_amount_received: paymentReceived,
       });
       if (error) throw error;
-      setOrderMessage("Order saved to Supabase. No payment was processed.");
+      if (typeof orderId !== "string") {
+        throw new Error("Supabase returned an invalid order receipt ID.");
+      }
+      setReceipt({
+        orderId,
+        items: cart.map((item) => ({
+          ...item,
+          product: { ...item.product },
+        })),
+        subtotal,
+        tax,
+        total,
+        paymentMethod,
+        amountReceived: paymentReceived,
+        changeDue:
+          paymentMethod === "cash"
+            ? Math.round((paymentReceived - total + Number.EPSILON) * 100) /
+              100
+            : 0,
+        completedAt: new Date(),
+      });
       setCart([]);
+      setAmountReceived("");
+      setPaymentMethod("cash");
     } catch (error) {
       setOrderError(`Could not save the order: ${describeError(error)}`);
     } finally {
@@ -485,14 +543,70 @@ export default function PosClient({
             </div>
           </div>
 
-          {orderMessage && (
-            <p
-              role="status"
-              className="mt-4 rounded-lg bg-[#edf1e8] px-3 py-2 text-sm text-cafe-sage-dark"
-            >
-              {orderMessage}
-            </p>
-          )}
+          <div className="mt-5 space-y-4 border-t border-cafe-border pt-5">
+            <div>
+              <label
+                htmlFor="payment-method"
+                className="mb-2 block text-sm font-medium"
+              >
+                Payment method <span aria-hidden="true">*</span>
+              </label>
+              <select
+                id="payment-method"
+                required
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(event.target.value as PaymentMethod)
+                }
+                className="h-11 w-full rounded-lg border border-cafe-border bg-white px-3 text-sm"
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="e_wallet">E-wallet</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="amount-received"
+                className="mb-2 block text-sm font-medium"
+              >
+                Amount received <span aria-hidden="true">*</span>
+              </label>
+              {paymentMethod === "cash" ? (
+                <input
+                  id="amount-received"
+                  type="number"
+                  inputMode="decimal"
+                  required
+                  min={total.toFixed(2)}
+                  step="0.01"
+                  value={amountReceived}
+                  onChange={(event) => setAmountReceived(event.target.value)}
+                  placeholder={total.toFixed(2)}
+                  className="h-11 w-full rounded-lg border border-cafe-border bg-white px-3 text-sm"
+                />
+              ) : (
+                <input
+                  id="amount-received"
+                  type="text"
+                  readOnly
+                  value={currency.format(total)}
+                  className="h-11 w-full rounded-lg border border-cafe-border bg-[#f3eee5] px-3 text-sm"
+                />
+              )}
+              {paymentMethod === "cash" && isPaymentValid && cart.length > 0 && (
+                <p className="mt-2 text-sm text-cafe-muted">
+                  Change due:{" "}
+                  {currency.format(
+                    Math.round(
+                      (cashAmountReceived - total + Number.EPSILON) * 100,
+                    ) / 100,
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+
           {orderError && (
             <p
               role="alert"
@@ -504,19 +618,128 @@ export default function PosClient({
 
           <button
             type="button"
-            disabled={cart.length === 0 || isSavingOrder}
+            disabled={cart.length === 0 || isSavingOrder || !isPaymentValid}
             onClick={placeOrder}
             className="mt-5 flex h-12 w-full items-center justify-center rounded-xl bg-cafe-sage-dark px-4 font-medium text-white transition hover:bg-[#43563d] disabled:cursor-not-allowed disabled:bg-[#b8beb5]"
           >
             {isSavingOrder
-              ? "Saving order..."
-              : `Place order · ${currency.format(total)}`}
+              ? "Completing order..."
+              : `Complete order · ${currency.format(total)}`}
           </button>
-          <p className="mt-3 text-center text-xs text-cafe-muted">
-            No payment processing
-          </p>
         </aside>
       </div>
+      <RegisterFinancialActivity role={role} />
+      {receipt && (
+        <div className="receipt-overlay fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-[#241b15]/60 px-4 py-8">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="receipt-title"
+            className="receipt-print w-full max-w-md rounded-2xl bg-white p-6 text-[#28251f] shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between gap-3 print:hidden">
+              <div>
+                <h2 id="receipt-title" className="text-xl font-semibold">
+                  Order receipt
+                </h2>
+                <p className="mt-1 text-sm text-cafe-muted">
+                  Order completed successfully.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close receipt"
+                onClick={() => setReceipt(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-cafe-border text-lg"
+              >
+                ×
+              </button>
+            </div>
+            <div className="receipt-content">
+              <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
+                <h3 className="text-lg font-bold tracking-wide">
+                  KAPE NA NAMAN
+                </h3>
+                <p className="mt-1 text-sm">Point of sale receipt</p>
+                <p className="mt-2 break-all text-xs">
+                  Order: {receipt.orderId}
+                </p>
+                <p className="mt-1 text-xs">
+                  {receipt.completedAt.toLocaleString()}
+                </p>
+              </header>
+              <ul className="space-y-3 border-b border-dashed border-[#bdb6aa] py-4 text-sm">
+                {receipt.items.map(({ product, quantity, size }) => {
+                  const unitPrice =
+                    size === "large"
+                      ? (product.largePrice ?? product.price)
+                      : product.price;
+                  return (
+                    <li
+                      key={`${product.id}-${size}`}
+                      className="flex justify-between gap-4"
+                    >
+                      <span>
+                        {quantity} × {product.name} ({size})
+                      </span>
+                      <span className="whitespace-nowrap">
+                        {currency.format(unitPrice * quantity)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <dl className="space-y-2 py-4 text-sm">
+                <div className="flex justify-between">
+                  <dt>Subtotal</dt>
+                  <dd>{currency.format(receipt.subtotal)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Tax (8%)</dt>
+                  <dd>{currency.format(receipt.tax)}</dd>
+                </div>
+                <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
+                  <dt>Total</dt>
+                  <dd>{currency.format(receipt.total)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Payment method</dt>
+                  <dd>{paymentMethodLabels[receipt.paymentMethod]}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Amount received</dt>
+                  <dd>{currency.format(receipt.amountReceived)}</dd>
+                </div>
+                {receipt.paymentMethod === "cash" && (
+                  <div className="flex justify-between font-semibold">
+                    <dt>Change</dt>
+                    <dd>{currency.format(receipt.changeDue)}</dd>
+                  </div>
+                )}
+              </dl>
+              <p className="border-t border-dashed border-[#bdb6aa] pt-4 text-center text-xs">
+                Thank you for your order!
+              </p>
+            </div>
+            <div className="mt-6 flex gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="h-11 flex-1 rounded-xl bg-cafe-sage-dark px-4 font-medium text-white"
+              >
+                Print receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => setReceipt(null)}
+                className="h-11 rounded-xl border border-cafe-border px-4 font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {sizeSelection && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#241b15]/50 px-5 py-8"

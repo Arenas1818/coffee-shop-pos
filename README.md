@@ -1,8 +1,9 @@
 # Kape Na Naman POS
 
-A Next.js point-of-sale prototype with a Supabase menu, staff email/password
-sign-in, and order saving. Checkout records orders only; it does not process
-payments.
+A Next.js point-of-sale app with a Supabase menu, staff email/password sign-in,
+and order saving. Checkout records Cash, Card, or E-wallet as the payment
+method; it does not process electronic payments. Completed orders show a
+printable receipt.
 
 ## Local setup
 
@@ -25,6 +26,9 @@ payments.
    - `supabase/migrations/20261012210000_dashboard_financials.sql`
    - `supabase/migrations/20261012220000_product_recipes_inventory_cost.sql`
    - `supabase/migrations/20261012230000_inventory_supply_cost_update.sql`
+   - `supabase/migrations/20261013000100_checkout_payment_receipt.sql`
+   - `supabase/migrations/20261013000200_dashboard_supply_stock_only.sql`
+   - `supabase/migrations/20261013000300_staff_register_activity.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -61,6 +65,17 @@ inventory, products, customers, and employees. Every active menu product is
 automatically linked to inventory. Products without a recipe deduct finished
 product stock at checkout; products with a recipe deduct each recipe supply
 atomically instead. Insufficient ingredient or product stock prevents checkout.
+Checkout requires a payment method. Cash requires an amount received at least
+equal to the order total and calculates change; Card and E-wallet are recorded
+as exact-total payments but are not processed by a payment provider. A
+successful order opens a printable receipt.
+All staff can view recent transactions on the register. Refunds initiated from
+the register require a Manager or Admin to approve with their Supabase email
+and password; the approver is separately authenticated and the active cashier
+session is preserved. Managers and admins can also record operating expenses
+from the register.
+The dashboard's low-stock alert lists supply inventory only, not finished
+products.
 For each supply, set its cost per inventory unit and record its current unit
 cost when restocking. Managers can also update a supply's unit cost without
 changing its on-hand quantity; updated costs apply to future ingredient cost

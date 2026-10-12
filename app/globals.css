@@ -48,3 +48,39 @@ button:focus-visible {
   outline: 2px solid #000;
   outline-offset: 2px;
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-overlay {
+    position: static !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+    visibility: visible !important;
+  }
+
+  .receipt-print {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    visibility: visible !important;
+  }
+
+  .receipt-overlay *,
+  .receipt-print * {
+    visibility: visible !important;
+  }
+}

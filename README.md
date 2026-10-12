@@ -29,6 +29,9 @@ printable receipt.
    - `supabase/migrations/20261013000100_checkout_payment_receipt.sql`
    - `supabase/migrations/20261013000200_dashboard_supply_stock_only.sql`
    - `supabase/migrations/20261013000300_staff_register_activity.sql`
+   - `supabase/migrations/20261013000400_edit_supply_details.sql`
+   - `supabase/migrations/20261013000500_pwd_senior_order_discount.sql`
+   - `supabase/migrations/20261013000600_register_transaction_receipts.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -69,17 +72,27 @@ Checkout requires a payment method. Cash requires an amount received at least
 equal to the order total and calculates change; Card and E-wallet are recorded
 as exact-total payments but are not processed by a payment provider. A
 successful order opens a printable receipt.
-All staff can view recent transactions on the register. Refunds initiated from
+The register can apply one 10% PWD or Senior Citizen discount to an order.
+The discount is applied to the subtotal before the app's existing 8% tax, and
+the saved order, payment validation, and printed receipt use the discounted
+amount. This is a flat POS discount setting and does not implement statutory
+eligibility verification or tax treatment.
+All staff can open a printable receipt from each recent transaction; PWD or
+Senior Citizen discounts are tagged in the list and detailed on the receipt.
+Refunds initiated from
 the register require a Manager or Admin to approve with their Supabase email
 and password; the approver is separately authenticated and the active cashier
 session is preserved. Managers and admins can also record operating expenses
 from the register.
 The dashboard's low-stock alert lists supply inventory only, not finished
-products.
-For each supply, set its cost per inventory unit and record its current unit
-cost when restocking. Managers can also update a supply's unit cost without
-changing its on-hand quantity; updated costs apply to future ingredient cost
-calculations. Recipes specify the amount of each supply used for one
+products. Managers can edit supply names, units, on-hand quantities, and
+low-stock thresholds; manual quantity changes are recorded in stock history.
+Changing a supply unit changes how recipe quantities are interpreted, so
+review affected recipes after changing it. For each supply, set its cost per
+inventory unit and record its current unit cost when restocking. Managers can
+also update a supply's unit cost without changing its on-hand quantity;
+updated costs apply to future ingredient cost calculations. Recipes specify
+the amount of each supply used for one
 drink; Regular and Large can have separate recipes, and Large falls back to the
 Regular recipe when no Large-specific recipe is saved. Ingredient cost is
 snapshotted on every order so daily cost reports use the cost known at the time

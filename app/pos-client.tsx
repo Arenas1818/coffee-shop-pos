@@ -49,11 +49,14 @@ type CartItem = {
 };
 
 type PaymentMethod = "cash" | "card" | "e_wallet";
+type DiscountType = "pwd" | "senior";
 
 type Receipt = {
   orderId: string;
   items: CartItem[];
   subtotal: number;
+  discountType: DiscountType | null;
+  discountAmount: number;
   tax: number;
   total: number;
   paymentMethod: PaymentMethod;
@@ -66,6 +69,11 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   cash: "Cash",
   card: "Card",
   e_wallet: "E-wallet",
+};
+
+const discountLabels: Record<DiscountType, string> = {
+  pwd: "PWD",
+  senior: "Senior Citizen",
 };
 
 function parseProducts(rows: unknown): Product[] {
@@ -143,6 +151,7 @@ export default function PosClient({
   const [sizeSelection, setSizeSelection] = useState<Product | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [amountReceived, setAmountReceived] = useState("");
+  const [discountType, setDiscountType] = useState<DiscountType | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [orderError, setOrderError] = useState("");
   const [isSavingOrder, setIsSavingOrder] = useState(false);
@@ -198,8 +207,14 @@ export default function PosClient({
         item.quantity,
     0,
   );
-  const tax = Math.round((subtotal * 0.08 + Number.EPSILON) * 100) / 100;
-  const total = subtotal + tax;
+  const discountAmount =
+    discountType === null
+      ? 0
+      : Math.round((subtotal * 0.1 + Number.EPSILON) * 100) / 100;
+  const discountedSubtotal = subtotal - discountAmount;
+  const tax =
+    Math.round((discountedSubtotal * 0.08 + Number.EPSILON) * 100) / 100;
+  const total = discountedSubtotal + tax;
   const cashAmountReceived = Number(amountReceived);
   const isPaymentValid =
     paymentMethod !== "cash" ||
@@ -228,15 +243,17 @@ export default function PosClient({
     size: "regular" | "large",
     change: number,
   ) {
-    setCart((currentCart) =>
-      currentCart
-        .map((item) =>
-          item.product.id === productId && item.size === size
-            ? { ...item, quantity: item.quantity + change }
-            : item,
-        )
-        .filter((item) => item.quantity > 0),
-    );
+    const nextCart = cart
+      .map((item) =>
+        item.product.id === productId && item.size === size
+          ? { ...item, quantity: item.quantity + change }
+          : item,
+      )
+      .filter((item) => item.quantity > 0);
+    setCart(nextCart);
+    if (nextCart.length === 0) {
+      setDiscountType(null);
+    }
   }
 
   async function placeOrder() {
@@ -258,6 +275,7 @@ export default function PosClient({
           variant: size,
           quantity,
         })),
+        p_discount_type: discountType,
         p_payment_method: paymentMethod,
         p_amount_received: paymentReceived,
       });
@@ -272,6 +290,8 @@ export default function PosClient({
           product: { ...item.product },
         })),
         subtotal,
+        discountType,
+        discountAmount,
         tax,
         total,
         paymentMethod,
@@ -286,6 +306,7 @@ export default function PosClient({
       setCart([]);
       setAmountReceived("");
       setPaymentMethod("cash");
+      setDiscountType(null);
     } catch (error) {
       setOrderError(`Could not save the order: ${describeError(error)}`);
     } finally {
@@ -528,13 +549,60 @@ export default function PosClient({
             </ul>
           )}
 
+          <div className="mt-5 border-t border-cafe-border pt-5">
+            <p className="mb-3 text-sm font-medium">PWD / Senior Citizen discount</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["pwd", "PWD · 10%"],
+                  ["senior", "Senior · 10%"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={discountType === value}
+                  onClick={() =>
+                    setDiscountType((current) =>
+                      current === value ? null : value,
+                    )
+                  }
+                  className={`h-10 rounded-lg border px-3 text-sm font-medium ${
+                    discountType === value
+                      ? "border-cafe-sage-dark bg-cafe-sage-dark text-white"
+                      : "border-cafe-border bg-white text-cafe-espresso"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {discountType && (
+              <p className="mt-2 text-xs text-cafe-muted">
+                10% discount: {currency.format(discountAmount)}
+              </p>
+            )}
+          </div>
+
           <div className="space-y-3 border-t border-cafe-border pt-5 text-sm">
             <div className="flex justify-between text-cafe-muted">
               <span>Subtotal</span>
               <span>{currency.format(subtotal)}</span>
             </div>
+            {discountType && (
+              <div className="flex justify-between text-cafe-sage-dark">
+                <span>{discountLabels[discountType]} discount (10%)</span>
+                <span>−{currency.format(discountAmount)}</span>
+              </div>
+            )}
+            {discountType && (
+              <div className="flex justify-between text-cafe-muted">
+                <span>Discounted subtotal</span>
+                <span>{currency.format(discountedSubtotal)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-cafe-muted">
-              <span>Estimated tax (8%)</span>
+              <span>Estimated tax (8% after discount)</span>
               <span>{currency.format(tax)}</span>
             </div>
             <div className="flex justify-between pt-1 text-base font-semibold">
@@ -694,8 +762,22 @@ export default function PosClient({
                   <dt>Subtotal</dt>
                   <dd>{currency.format(receipt.subtotal)}</dd>
                 </div>
+                {receipt.discountType && (
+                  <div className="flex justify-between">
+                    <dt>{discountLabels[receipt.discountType]} discount (10%)</dt>
+                    <dd>−{currency.format(receipt.discountAmount)}</dd>
+                  </div>
+                )}
+                {receipt.discountType && (
+                  <div className="flex justify-between">
+                    <dt>Discounted subtotal</dt>
+                    <dd>
+                      {currency.format(receipt.subtotal - receipt.discountAmount)}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <dt>Tax (8%)</dt>
+                  <dt>Tax (8% after discount)</dt>
                   <dd>{currency.format(receipt.tax)}</dd>
                 </div>
                 <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">

@@ -12,9 +12,20 @@ type RefundableOrder = {
 
 type RecentOrder = {
   id: string;
+  subtotal: number;
+  discountType: "pwd" | "senior" | null;
+  discountAmount: number;
+  tax: number;
   total: number;
+  paymentMethod: string | null;
+  amountReceived: number | null;
   createdAt: string;
-  items: { name: string; variant: string | null; quantity: number }[];
+  items: {
+    name: string;
+    variant: string | null;
+    quantity: number;
+    unitPrice: number | null;
+  }[];
 };
 
 type RegisterActivity = {
@@ -62,11 +73,25 @@ function parseActivity(value: unknown): RegisterActivity {
     if (!isRecord(item) || !Array.isArray(item.items)) {
       throw new Error("The register returned an invalid recent transaction.");
     }
+    const subtotal = Number(item.subtotal);
+    const discountAmount = Number(item.discount_amount);
+    const tax = Number(item.tax);
     const total = Number(item.total);
+    const amountReceived =
+      item.amount_received === null ? null : Number(item.amount_received);
     if (
       typeof item.id !== "string" ||
       typeof item.created_at !== "string" ||
-      !Number.isFinite(total)
+      !Number.isFinite(subtotal) ||
+      !Number.isFinite(discountAmount) ||
+      !Number.isFinite(tax) ||
+      !Number.isFinite(total) ||
+      (item.discount_type !== null &&
+        item.discount_type !== "pwd" &&
+        item.discount_type !== "senior") ||
+      (item.payment_method !== null &&
+        typeof item.payment_method !== "string") ||
+      (amountReceived !== null && !Number.isFinite(amountReceived))
     ) {
       throw new Error("The register returned invalid transaction details.");
     }
@@ -75,12 +100,17 @@ function parseActivity(value: unknown): RegisterActivity {
         throw new Error("The register returned an invalid transaction item.");
       }
       const quantity = Number(orderItem.quantity);
+      const unitPrice =
+        orderItem.unit_price === null || orderItem.unit_price === undefined
+          ? null
+          : Number(orderItem.unit_price);
       if (
         typeof orderItem.name !== "string" ||
         (orderItem.variant !== undefined &&
           orderItem.variant !== null &&
           typeof orderItem.variant !== "string") ||
-        !Number.isFinite(quantity)
+        !Number.isFinite(quantity) ||
+        (unitPrice !== null && !Number.isFinite(unitPrice))
       ) {
         throw new Error("The register returned invalid transaction item details.");
       }
@@ -89,9 +119,25 @@ function parseActivity(value: unknown): RegisterActivity {
         variant:
           typeof orderItem.variant === "string" ? orderItem.variant : null,
         quantity,
+        unitPrice,
       };
     });
-    return { id: item.id, total, createdAt: item.created_at, items };
+    return {
+      id: item.id,
+      subtotal,
+      discountType:
+        item.discount_type === "pwd" || item.discount_type === "senior"
+          ? item.discount_type
+          : null,
+      discountAmount,
+      tax,
+      total,
+      paymentMethod:
+        typeof item.payment_method === "string" ? item.payment_method : null,
+      amountReceived,
+      createdAt: item.created_at,
+      items,
+    };
   });
 
   return { refundableOrders, recentOrders };
@@ -103,6 +149,10 @@ const transactionDate = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
+const transactionDiscountLabels = {
+  pwd: "PWD · 10% discount",
+  senior: "Senior Citizen · 10% discount",
+} as const;
 
 export default function RegisterFinancialActivity({
   role,
@@ -110,6 +160,7 @@ export default function RegisterFinancialActivity({
   role: "staff" | "manager" | "admin";
 }) {
   const [activity, setActivity] = useState<RegisterActivity | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<RecentOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -366,31 +417,43 @@ export default function RegisterFinancialActivity({
         ) : activity?.recentOrders.length ? (
           <ul className="divide-y divide-cafe-border">
             {activity.recentOrders.map((order) => (
-              <li
-                key={order.id}
-                className="flex items-center justify-between gap-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    Order #{order.id.slice(0, 8)}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-cafe-muted">
-                    {order.items
-                      .map(
-                        (item) =>
-                          `${item.quantity}× ${item.name}${item.variant ? ` (${item.variant})` : ""}`,
-                      )
-                      .join(", ")}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold">
-                    {currency.format(order.total)}
-                  </p>
-                  <p className="text-xs text-cafe-muted">
-                    {transactionDate.format(new Date(order.createdAt))}
-                  </p>
-                </div>
+              <li key={order.id} className="py-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(order)}
+                  className="flex w-full items-center justify-between gap-4 rounded-lg text-left transition hover:bg-[#f8f4ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cafe-sage-dark"
+                  aria-label={`View receipt for order ${order.id.slice(0, 8)}`}
+                >
+                  <div className="min-w-0 py-1">
+                    <p className="text-sm font-medium">
+                      Order #{order.id.slice(0, 8)}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-cafe-muted">
+                      {order.items
+                        .map(
+                          (item) =>
+                            `${item.quantity}× ${item.name}${item.variant ? ` (${item.variant})` : ""}`,
+                        )
+                        .join(", ")}
+                    </p>
+                    {order.discountType && (
+                      <span className="mt-2 inline-flex rounded-full bg-[#edf1e8] px-2.5 py-1 text-xs font-semibold text-cafe-sage-dark">
+                        {transactionDiscountLabels[order.discountType]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold">
+                      {currency.format(order.total)}
+                    </p>
+                    <p className="text-xs text-cafe-muted">
+                      {transactionDate.format(new Date(order.createdAt))}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-cafe-sage-dark">
+                      View receipt
+                    </p>
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
@@ -415,6 +478,132 @@ export default function RegisterFinancialActivity({
         >
           Could not load or save register activity: {errorMessage}
         </p>
+      )}
+      {selectedOrder && (
+        <div className="receipt-overlay fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto bg-[#241b15]/60 px-4 py-8">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transaction-receipt-title"
+            className="receipt-print w-full max-w-md rounded-2xl bg-white p-6 text-[#28251f] shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between gap-3 print:hidden">
+              <div>
+                <h2
+                  id="transaction-receipt-title"
+                  className="text-xl font-semibold"
+                >
+                  Transaction receipt
+                </h2>
+                <p className="mt-1 text-sm text-cafe-muted">
+                  Order #{selectedOrder.id.slice(0, 8)}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close transaction receipt"
+                onClick={() => setSelectedOrder(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-cafe-border text-lg"
+              >
+                ×
+              </button>
+            </div>
+            <div className="receipt-content">
+              <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
+                <h3 className="text-lg font-bold tracking-wide">
+                  KAPE NA NAMAN
+                </h3>
+                <p className="mt-1 text-sm">Point of sale receipt</p>
+                <p className="mt-2 break-all text-xs">
+                  Order: {selectedOrder.id}
+                </p>
+                <p className="mt-1 text-xs">
+                  {transactionDate.format(new Date(selectedOrder.createdAt))}
+                </p>
+              </header>
+              <ul className="space-y-3 border-b border-dashed border-[#bdb6aa] py-4 text-sm">
+                {selectedOrder.items.map((item, index) => (
+                  <li
+                    key={`${item.name}-${item.variant}-${index}`}
+                    className="flex justify-between gap-4"
+                  >
+                    <span>
+                      {item.quantity} × {item.name}
+                      {item.variant ? ` (${item.variant})` : ""}
+                    </span>
+                    <span className="whitespace-nowrap">
+                      {item.unitPrice === null
+                        ? "—"
+                        : currency.format(item.unitPrice * item.quantity)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <dl className="space-y-2 py-4 text-sm">
+                <div className="flex justify-between">
+                  <dt>Subtotal</dt>
+                  <dd>{currency.format(selectedOrder.subtotal)}</dd>
+                </div>
+                {selectedOrder.discountType && (
+                  <div className="flex justify-between">
+                    <dt>
+                      {transactionDiscountLabels[selectedOrder.discountType]}
+                    </dt>
+                    <dd>−{currency.format(selectedOrder.discountAmount)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <dt>Tax</dt>
+                  <dd>{currency.format(selectedOrder.tax)}</dd>
+                </div>
+                <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
+                  <dt>Total</dt>
+                  <dd>{currency.format(selectedOrder.total)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Payment method</dt>
+                  <dd>{selectedOrder.paymentMethod ?? "Not recorded"}</dd>
+                </div>
+                {selectedOrder.amountReceived !== null && (
+                  <div className="flex justify-between">
+                    <dt>Amount received</dt>
+                    <dd>{currency.format(selectedOrder.amountReceived)}</dd>
+                  </div>
+                )}
+                {selectedOrder.paymentMethod === "cash" &&
+                  selectedOrder.amountReceived !== null && (
+                    <div className="flex justify-between">
+                      <dt>Change</dt>
+                      <dd>
+                        {currency.format(
+                          selectedOrder.amountReceived - selectedOrder.total,
+                        )}
+                      </dd>
+                    </div>
+                  )}
+              </dl>
+              <p className="border-t border-dashed border-[#bdb6aa] pt-4 text-center text-xs">
+                Thank you for your order!
+              </p>
+            </div>
+            <div className="mt-6 flex gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="h-11 flex-1 rounded-xl bg-cafe-sage-dark px-4 font-medium text-white"
+              >
+                Print receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="h-11 rounded-xl border border-cafe-border px-4 font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </section>
+        </div>
       )}
       {isRefundDialogOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-[#241b15]/60 px-4 py-8">

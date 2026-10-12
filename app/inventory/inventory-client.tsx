@@ -18,11 +18,12 @@ type InventoryItem = {
 };
 type Movement = {
   id: string;
-  movement_type: "restock" | "sale";
+  movement_type: "restock" | "sale" | "adjustment";
   quantity_change: number;
   note: string | null;
   created_at: string;
   staff_email: string | null;
+  unit: string | null;
 };
 
 const initialForm = {
@@ -33,6 +34,12 @@ const initialForm = {
 };
 
 type RecipeRow = { inventoryItemId: string; quantity: string };
+type SupplyEdit = {
+  name: string;
+  unit: string;
+  quantity: string;
+  lowStockThreshold: string;
+};
 
 function errorText(error: unknown): string {
   if (
@@ -74,6 +81,13 @@ export default function InventoryClient({
   const [restockNotes, setRestockNotes] = useState<Record<string, string>>({});
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [costEditValue, setCostEditValue] = useState("");
+  const [editingSupplyId, setEditingSupplyId] = useState<string | null>(null);
+  const [supplyEdit, setSupplyEdit] = useState<SupplyEdit>({
+    name: "",
+    unit: "",
+    quantity: "",
+    lowStockThreshold: "",
+  });
   const [activity, setActivity] = useState<Record<string, Movement[]>>({});
   const [activityOpen, setActivityOpen] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,6 +264,61 @@ export default function InventoryClient({
       );
     } catch (error) {
       setErrorMessage(`Could not update ${item.name} cost: ${errorText(error)}`);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function updateSupply(item: InventoryItem) {
+    const name = supplyEdit.name.trim();
+    const unit = supplyEdit.unit.trim();
+    const quantity = Number(supplyEdit.quantity);
+    const threshold = Number(supplyEdit.lowStockThreshold);
+    if (
+      name.length < 1 ||
+      name.length > 100 ||
+      unit.length < 1 ||
+      unit.length > 24 ||
+      !Number.isFinite(quantity) ||
+      quantity < 0 ||
+      quantity > 999999999.999 ||
+      !Number.isFinite(threshold) ||
+      threshold < 0 ||
+      threshold > 999999999.999
+    ) {
+      setErrorMessage(
+        "Enter a valid supply name, unit, quantity, and non-negative alert threshold.",
+      );
+      return;
+    }
+
+    setBusyId(item.id);
+    setErrorMessage("");
+    setNotice("");
+    try {
+      const { error } = await createSupabaseBrowserClient().rpc(
+        "update_supply_details",
+        {
+          p_inventory_item_id: item.id,
+          p_name: name,
+          p_unit: unit,
+          p_quantity: Number(quantity.toFixed(3)),
+          p_low_stock_threshold: Number(threshold.toFixed(3)),
+          p_note: `Manual adjustment: ${amount(item.quantity)} ${item.unit} to ${amount(quantity)} ${unit}`,
+        },
+      );
+      if (error) throw error;
+      await loadData();
+      setEditingSupplyId(null);
+      setSupplyEdit({
+        name: "",
+        unit: "",
+        quantity: "",
+        lowStockThreshold: "",
+      });
+      setNotice(`${name} updated.`);
+    } catch (error) {
+      setErrorMessage(`Could not update ${item.name}: ${errorText(error)}`);
     } finally {
       setBusyId("");
     }
@@ -694,6 +763,28 @@ export default function InventoryClient({
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={busyId === item.id}
+                            onClick={() => {
+                              setEditingSupplyId(
+                                editingSupplyId === item.id ? null : item.id,
+                              );
+                              setSupplyEdit({
+                                name: item.name,
+                                unit: item.unit,
+                                quantity: String(item.quantity),
+                                lowStockThreshold: String(
+                                  item.low_stock_threshold,
+                                ),
+                              });
+                            }}
+                            className="rounded-lg border border-black bg-black px-3 py-2 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333] disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {editingSupplyId === item.id
+                              ? "Close edit"
+                              : "Edit supply"}
+                          </button>
                           <button type="button" onClick={() => void toggleActivity(item)} className="rounded-lg border border-black bg-black px-3 py-2 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333]">
                             {activityOpen === item.id ? "Hide history" : "Stock history"}
                           </button>
@@ -702,6 +793,130 @@ export default function InventoryClient({
                           </button>
                         </div>
                       </div>
+                      {editingSupplyId === item.id && (
+                        <div className="mt-4 border-t border-cafe-border pt-4">
+                          <h4 className="mb-3 text-sm font-semibold">
+                            Edit supply details
+                          </h4>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <label
+                                htmlFor={`edit-supply-name-${item.id}`}
+                                className="mb-1.5 block text-sm font-medium"
+                              >
+                                Supply name
+                              </label>
+                              <input
+                                id={`edit-supply-name-${item.id}`}
+                                required
+                                maxLength={100}
+                                value={supplyEdit.name}
+                                onChange={(event) =>
+                                  setSupplyEdit((current) => ({
+                                    ...current,
+                                    name: event.target.value,
+                                  }))
+                                }
+                                className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label
+                                htmlFor={`edit-supply-unit-${item.id}`}
+                                className="mb-1.5 block text-sm font-medium"
+                              >
+                                Unit
+                              </label>
+                              <input
+                                id={`edit-supply-unit-${item.id}`}
+                                required
+                                maxLength={24}
+                                value={supplyEdit.unit}
+                                onChange={(event) =>
+                                  setSupplyEdit((current) => ({
+                                    ...current,
+                                    unit: event.target.value,
+                                  }))
+                                }
+                                className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label
+                                htmlFor={`edit-supply-quantity-${item.id}`}
+                                className="mb-1.5 block text-sm font-medium"
+                              >
+                                On-hand quantity
+                              </label>
+                              <input
+                                id={`edit-supply-quantity-${item.id}`}
+                                required
+                                type="number"
+                                min="0"
+                                max="999999999.999"
+                                step="0.001"
+                                value={supplyEdit.quantity}
+                                onChange={(event) =>
+                                  setSupplyEdit((current) => ({
+                                    ...current,
+                                    quantity: event.target.value,
+                                  }))
+                                }
+                                className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label
+                                htmlFor={`edit-supply-threshold-${item.id}`}
+                                className="mb-1.5 block text-sm font-medium"
+                              >
+                                Low-stock alert threshold
+                              </label>
+                              <input
+                                id={`edit-supply-threshold-${item.id}`}
+                                required
+                                type="number"
+                                min="0"
+                                max="999999999.999"
+                                step="0.001"
+                                value={supplyEdit.lowStockThreshold}
+                                onChange={(event) =>
+                                  setSupplyEdit((current) => ({
+                                    ...current,
+                                    lowStockThreshold: event.target.value,
+                                  }))
+                                }
+                                className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm"
+                              />
+                            </div>
+                          </div>
+                          {supplyEdit.unit.trim() !== item.unit && (
+                            <p className="mt-3 rounded-lg bg-[#fff5df] px-3 py-2 text-sm text-[#76501d]">
+                              Changing the unit changes how quantities in
+                              recipes are interpreted. Review recipes that use
+                              this supply after saving.
+                            </p>
+                          )}
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={busyId === item.id}
+                              onClick={() => void updateSupply(item)}
+                              className="h-10 rounded-lg border border-black bg-black px-4 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333] disabled:cursor-wait disabled:opacity-60"
+                            >
+                              {busyId === item.id ? "Saving..." : "Save supply"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === item.id}
+                              onClick={() => setEditingSupplyId(null)}
+                              className="h-10 rounded-lg border border-black bg-black px-4 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333] disabled:cursor-wait disabled:opacity-60"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {editingCostId === item.id && (
                         <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-cafe-border pt-4">
                           <div className="min-w-[220px] flex-1">
@@ -808,14 +1023,19 @@ export default function InventoryClient({
                               {activity[item.id].map((movement) => (
                                 <li key={movement.id} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
                                   <span>
-                                    {movement.movement_type === "restock" ? "Restock" : "Sale"} · {movement.staff_email ?? "Staff"}
+                                    {movement.movement_type === "restock"
+                                      ? "Restock"
+                                      : movement.movement_type === "adjustment"
+                                        ? "Adjustment"
+                                        : "Sale"}{" "}
+                                    · {movement.staff_email ?? "Staff"}
                                     {movement.note ? ` · ${movement.note}` : ""}
                                     <span className="ml-2 text-xs text-cafe-muted">
                                       {movementDate.format(new Date(movement.created_at))}
                                     </span>
                                   </span>
                                   <span className={movement.quantity_change > 0 ? "text-cafe-sage-dark" : "text-[#9a5143]"}>
-                                    {movement.quantity_change > 0 ? "+" : ""}{amount(movement.quantity_change)} {item.unit}
+                                    {movement.quantity_change > 0 ? "+" : ""}{amount(movement.quantity_change)} {movement.unit ?? item.unit}
                                   </span>
                                 </li>
                               ))}

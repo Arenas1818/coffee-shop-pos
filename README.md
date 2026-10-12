@@ -1,4 +1,4 @@
-# Little Oak Coffee POS
+# Kape Na Naman POS
 
 A Next.js point-of-sale prototype with a Supabase menu, staff email/password
 sign-in, and order saving. Checkout records orders only; it does not process

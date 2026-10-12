@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -22,6 +22,34 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [backgroundVideoUrl, setBackgroundVideoUrl] = useState("");
+  const [backgroundVideoError, setBackgroundVideoError] = useState("");
+
+  useEffect(() => {
+    let isCurrent = true;
+    const loadBackgroundVideo = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data: path, error } = await supabase.rpc(
+          "get_landing_video_path",
+        );
+        if (error) throw error;
+        if (path === null) return;
+        if (typeof path !== "string") {
+          throw new Error("The landing video setting has an invalid value.");
+        }
+        const { data } = supabase.storage.from("store-media").getPublicUrl(path);
+        if (isCurrent) setBackgroundVideoUrl(data.publicUrl);
+      } catch (error) {
+        if (isCurrent) setBackgroundVideoError(describeError(error));
+      }
+    };
+    const timer = window.setTimeout(() => void loadBackgroundVideo(), 0);
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,8 +71,27 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f8f7f4] px-5 py-12 text-[#28251f]">
-      <section className="w-full max-w-md rounded-2xl border border-[#e9e6e0] bg-white p-7 shadow-sm sm:p-9">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f8f7f4] px-5 py-12 text-[#28251f]">
+      {backgroundVideoUrl && (
+        <video
+          aria-hidden="true"
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        >
+          <source
+            src={backgroundVideoUrl}
+            type={backgroundVideoUrl.toLowerCase().includes(".webm") ? "video/webm" : "video/mp4"}
+          />
+        </video>
+      )}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[#f8f7f4]/75 backdrop-blur-[2px]"
+      />
+      <section className="relative z-10 w-full max-w-md rounded-2xl border border-[#e9e6e0] bg-white/95 p-7 shadow-xl backdrop-blur-sm sm:p-9">
         <div className="mb-7 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#344b3b] text-xl text-white">
             ☕
@@ -116,6 +163,15 @@ export default function LoginPage() {
         <p className="mt-5 text-center text-xs text-[#9a968e]">
           Accounts are managed by your project administrator.
         </p>
+        {backgroundVideoError && (
+          <p
+            role="status"
+            className="mt-3 text-center text-xs text-[#9a5143]"
+          >
+            Landing video unavailable: {backgroundVideoError}
+            {" "}Apply migrations 20261013000900 and 20261013001000 in Supabase.
+          </p>
+        )}
       </section>
     </main>
   );

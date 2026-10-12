@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import ManagementSidebar from "../management-sidebar";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { useStoreSettings } from "@/lib/store-settings";
 
 type Product = { id: string; name: string; large_price: number | null };
 type InventoryItem = {
@@ -71,6 +72,7 @@ export default function InventoryClient({
 }: {
   role: "manager" | "admin";
 }) {
+  const { settings, formatCurrency } = useStoreSettings();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState(initialForm);
@@ -468,8 +470,11 @@ export default function InventoryClient({
 
   const supplyItems = items.filter((item) => item.item_type === "supply");
   const activeSupplies = supplyItems.filter((item) => item.active);
+  function effectiveThreshold(item: InventoryItem) {
+    return item.low_stock_threshold || settings.globalLowStockThreshold;
+  }
   const lowStockItems = activeSupplies.filter(
-    (item) => item.quantity <= item.low_stock_threshold,
+    (item) => item.quantity <= effectiveThreshold(item),
   );
   const selectedRecipeProduct = products.find(
     (product) => product.id === recipeProductId,
@@ -575,6 +580,9 @@ export default function InventoryClient({
                   onChange={(event) => setForm({ ...form, low_stock_threshold: event.target.value })}
                   className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm"
                 />
+                <p className="mt-1 text-xs text-cafe-muted">
+                  Enter 0 to use the global threshold ({amount(settings.globalLowStockThreshold)}).
+                </p>
               </div>
               <div className="flex items-end">
                 <button
@@ -744,7 +752,8 @@ export default function InventoryClient({
             ) : (
               <ul className="space-y-3">
                 {supplyItems.map((item) => {
-                  const low = item.active && item.quantity <= item.low_stock_threshold;
+                  const threshold = effectiveThreshold(item);
+                  const low = item.active && item.quantity <= threshold;
                   return (
                     <li key={item.id} className="rounded-2xl border border-cafe-border bg-cafe-card p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -758,8 +767,8 @@ export default function InventoryClient({
                           </div>
                           <p className="mt-2 text-sm text-cafe-muted">
                             In stock: <strong className="text-[#342a22]">{amount(item.quantity)} {item.unit}</strong>
-                            {" · "}Alert at {amount(item.low_stock_threshold)} {item.unit}
-                            {" · "}Cost: {item.unit_cost === null ? "not set" : `${item.unit_cost} PHP/${item.unit}`}
+                            {" · "}Alert at {amount(threshold)} {item.unit}
+                            {" · "}Cost: {item.unit_cost === null ? "not set" : `${formatCurrency(item.unit_cost)}/${item.unit}`}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -888,6 +897,10 @@ export default function InventoryClient({
                                 }
                                 className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm"
                               />
+                              <p className="mt-1 text-xs text-cafe-muted">
+                                Enter 0 to use the global threshold (
+                                {amount(settings.globalLowStockThreshold)}).
+                              </p>
                             </div>
                           </div>
                           {supplyEdit.unit.trim() !== item.unit && (

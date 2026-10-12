@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { useStoreSettings } from "@/lib/store-settings";
 import RegisterFinancialActivity from "./register-financial-activity";
 
 const categories = ["All", "Coffee", "Non-Coffee", "Tea", "Bakery"] as const;
@@ -57,12 +57,17 @@ type Receipt = {
   subtotal: number;
   discountType: DiscountType | null;
   discountAmount: number;
+  taxRate: number;
   tax: number;
   total: number;
   paymentMethod: PaymentMethod;
   amountReceived: number;
   changeDue: number;
   completedAt: Date;
+  storeName: string;
+  address: string;
+  phone: string;
+  receiptFooter: string;
 };
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -142,6 +147,12 @@ export default function PosClient({
   role: "staff" | "manager" | "admin";
 }) {
   const router = useRouter();
+  const {
+    settings,
+    formatCurrency,
+    isLoading: isLoadingSettings,
+    error: storeSettingsError,
+  } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [menuError, setMenuError] = useState("");
@@ -213,7 +224,9 @@ export default function PosClient({
       : Math.round((subtotal * 0.1 + Number.EPSILON) * 100) / 100;
   const discountedSubtotal = subtotal - discountAmount;
   const tax =
-    Math.round((discountedSubtotal * 0.08 + Number.EPSILON) * 100) / 100;
+    Math.round(
+      (discountedSubtotal * (settings.taxRate / 100) + Number.EPSILON) * 100,
+    ) / 100;
   const total = discountedSubtotal + tax;
   const cashAmountReceived = Number(amountReceived);
   const isPaymentValid =
@@ -258,6 +271,12 @@ export default function PosClient({
 
   async function placeOrder() {
     if (cart.length === 0) return;
+    if (isLoadingSettings || storeSettingsError) {
+      setOrderError(
+        "Store settings are still loading or unavailable. Refresh the register before completing an order.",
+      );
+      return;
+    }
     if (!isPaymentValid) {
       setOrderError("Enter an amount received that covers the order total.");
       return;
@@ -292,6 +311,7 @@ export default function PosClient({
         subtotal,
         discountType,
         discountAmount,
+        taxRate: settings.taxRate,
         tax,
         total,
         paymentMethod,
@@ -302,6 +322,10 @@ export default function PosClient({
               100
             : 0,
         completedAt: new Date(),
+        storeName: settings.storeName,
+        address: settings.address,
+        phone: settings.phone,
+        receiptFooter: settings.receiptFooter,
       });
       setCart([]);
       setAmountReceived("");
@@ -334,7 +358,9 @@ export default function PosClient({
               ☕
             </div>
             <div>
-              <p className="font-semibold tracking-tight text-cafe-espresso">KAPE NA NAMAN</p>
+              <p className="font-semibold tracking-tight text-cafe-espresso">
+                {settings.storeName}
+              </p>
               <p className="text-xs text-cafe-muted">Point of sale</p>
             </div>
           </div>
@@ -457,8 +483,8 @@ export default function PosClient({
                     </div>
                     <span className="shrink-0 text-sm font-semibold text-cafe-espresso">
                       {product.largePrice === null
-                        ? currency.format(product.price)
-                        : `${currency.format(product.price)} / ${currency.format(product.largePrice)}`}
+                        ? formatCurrency(product.price)
+                        : `${formatCurrency(product.price)} / ${formatCurrency(product.largePrice)}`}
                     </span>
                   </div>
                   <p className="px-1 pt-2 text-xs font-medium text-cafe-sage group-hover:text-cafe-sage-dark">
@@ -517,7 +543,7 @@ export default function PosClient({
                       {product.name} · {size === "large" ? "Large" : "Regular"}
                     </p>
                     <p className="mt-1 text-xs text-cafe-muted">
-                      {currency.format(
+                      {formatCurrency(
                         size === "large"
                           ? (product.largePrice ?? product.price)
                           : product.price,
@@ -579,7 +605,7 @@ export default function PosClient({
             </div>
             {discountType && (
               <p className="mt-2 text-xs text-cafe-muted">
-                10% discount: {currency.format(discountAmount)}
+                10% discount: {formatCurrency(discountAmount)}
               </p>
             )}
           </div>
@@ -587,27 +613,27 @@ export default function PosClient({
           <div className="space-y-3 border-t border-cafe-border pt-5 text-sm">
             <div className="flex justify-between text-cafe-muted">
               <span>Subtotal</span>
-              <span>{currency.format(subtotal)}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
             {discountType && (
               <div className="flex justify-between text-cafe-sage-dark">
                 <span>{discountLabels[discountType]} discount (10%)</span>
-                <span>−{currency.format(discountAmount)}</span>
+                <span>−{formatCurrency(discountAmount)}</span>
               </div>
             )}
             {discountType && (
               <div className="flex justify-between text-cafe-muted">
                 <span>Discounted subtotal</span>
-                <span>{currency.format(discountedSubtotal)}</span>
+                <span>{formatCurrency(discountedSubtotal)}</span>
               </div>
             )}
             <div className="flex justify-between text-cafe-muted">
-              <span>Estimated tax (8% after discount)</span>
-              <span>{currency.format(tax)}</span>
+              <span>Estimated tax ({settings.taxRate}% after discount)</span>
+              <span>{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between pt-1 text-base font-semibold">
               <span>Total</span>
-              <span>{currency.format(total)}</span>
+              <span>{formatCurrency(total)}</span>
             </div>
           </div>
 
@@ -658,14 +684,14 @@ export default function PosClient({
                   id="amount-received"
                   type="text"
                   readOnly
-                  value={currency.format(total)}
+                  value={formatCurrency(total)}
                   className="h-11 w-full rounded-lg border border-cafe-border bg-[#f3eee5] px-3 text-sm"
                 />
               )}
               {paymentMethod === "cash" && isPaymentValid && cart.length > 0 && (
                 <p className="mt-2 text-sm text-cafe-muted">
                   Change due:{" "}
-                  {currency.format(
+                  {formatCurrency(
                     Math.round(
                       (cashAmountReceived - total + Number.EPSILON) * 100,
                     ) / 100,
@@ -686,13 +712,21 @@ export default function PosClient({
 
           <button
             type="button"
-            disabled={cart.length === 0 || isSavingOrder || !isPaymentValid}
+            disabled={
+              cart.length === 0 ||
+              isSavingOrder ||
+              !isPaymentValid ||
+              isLoadingSettings ||
+              Boolean(storeSettingsError)
+            }
             onClick={placeOrder}
             className="mt-5 flex h-12 w-full items-center justify-center rounded-xl bg-cafe-sage-dark px-4 font-medium text-white transition hover:bg-[#43563d] disabled:cursor-not-allowed disabled:bg-[#b8beb5]"
           >
-            {isSavingOrder
+            {isLoadingSettings
+              ? "Loading store settings..."
+              : isSavingOrder
               ? "Completing order..."
-              : `Complete order · ${currency.format(total)}`}
+              : `Complete order · ${formatCurrency(total)}`}
           </button>
         </aside>
       </div>
@@ -726,9 +760,11 @@ export default function PosClient({
             <div className="receipt-content">
               <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
                 <h3 className="text-lg font-bold tracking-wide">
-                  KAPE NA NAMAN
+                  {receipt.storeName}
                 </h3>
                 <p className="mt-1 text-sm">Point of sale receipt</p>
+                {receipt.address && <p className="mt-1 text-xs">{receipt.address}</p>}
+                {receipt.phone && <p className="mt-1 text-xs">{receipt.phone}</p>}
                 <p className="mt-2 break-all text-xs">
                   Order: {receipt.orderId}
                 </p>
@@ -751,7 +787,7 @@ export default function PosClient({
                         {quantity} × {product.name} ({size})
                       </span>
                       <span className="whitespace-nowrap">
-                        {currency.format(unitPrice * quantity)}
+                        {formatCurrency(unitPrice * quantity)}
                       </span>
                     </li>
                   );
@@ -760,29 +796,29 @@ export default function PosClient({
               <dl className="space-y-2 py-4 text-sm">
                 <div className="flex justify-between">
                   <dt>Subtotal</dt>
-                  <dd>{currency.format(receipt.subtotal)}</dd>
+                  <dd>{formatCurrency(receipt.subtotal)}</dd>
                 </div>
                 {receipt.discountType && (
                   <div className="flex justify-between">
                     <dt>{discountLabels[receipt.discountType]} discount (10%)</dt>
-                    <dd>−{currency.format(receipt.discountAmount)}</dd>
+                    <dd>−{formatCurrency(receipt.discountAmount)}</dd>
                   </div>
                 )}
                 {receipt.discountType && (
                   <div className="flex justify-between">
                     <dt>Discounted subtotal</dt>
                     <dd>
-                      {currency.format(receipt.subtotal - receipt.discountAmount)}
+                      {formatCurrency(receipt.subtotal - receipt.discountAmount)}
                     </dd>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <dt>Tax (8% after discount)</dt>
-                  <dd>{currency.format(receipt.tax)}</dd>
+                  <dt>Tax ({receipt.taxRate}% after discount)</dt>
+                  <dd>{formatCurrency(receipt.tax)}</dd>
                 </div>
                 <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
                   <dt>Total</dt>
-                  <dd>{currency.format(receipt.total)}</dd>
+                  <dd>{formatCurrency(receipt.total)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Payment method</dt>
@@ -790,17 +826,17 @@ export default function PosClient({
                 </div>
                 <div className="flex justify-between">
                   <dt>Amount received</dt>
-                  <dd>{currency.format(receipt.amountReceived)}</dd>
+                  <dd>{formatCurrency(receipt.amountReceived)}</dd>
                 </div>
                 {receipt.paymentMethod === "cash" && (
                   <div className="flex justify-between font-semibold">
                     <dt>Change</dt>
-                    <dd>{currency.format(receipt.changeDue)}</dd>
+                    <dd>{formatCurrency(receipt.changeDue)}</dd>
                   </div>
                 )}
               </dl>
               <p className="border-t border-dashed border-[#bdb6aa] pt-4 text-center text-xs">
-                Thank you for your order!
+                {receipt.receiptFooter}
               </p>
             </div>
             <div className="mt-6 flex gap-3 print:hidden">
@@ -867,7 +903,7 @@ export default function PosClient({
               >
                 <span className="font-medium">Regular</span>
                 <span className="font-semibold text-cafe-espresso">
-                  {currency.format(sizeSelection.price)}
+                  {formatCurrency(sizeSelection.price)}
                 </span>
               </button>
               {sizeSelection.largePrice !== null && (
@@ -881,7 +917,7 @@ export default function PosClient({
                 >
                   <span className="font-medium">Large</span>
                   <span className="font-semibold text-cafe-espresso">
-                    {currency.format(sizeSelection.largePrice)}
+                    {formatCurrency(sizeSelection.largePrice)}
                   </span>
                 </button>
               )}

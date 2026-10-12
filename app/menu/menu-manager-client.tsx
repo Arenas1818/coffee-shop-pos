@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import { currency } from "@/lib/currency";
 import ManagementSidebar from "../management-sidebar";
+import { useStoreSettings } from "@/lib/store-settings";
 
 const productOptions = [
   { icon: "☕", color: "latte" },
@@ -73,6 +73,7 @@ function errorText(error: unknown): string {
 }
 
 export default function MenuManagerClient() {
+  const { formatCurrency } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [form, setForm] = useState<ProductForm>(emptyForm);
@@ -781,9 +782,9 @@ export default function MenuManagerClient() {
                         {product.category} · {product.description}
                       </p>
                       <p className="mt-1 text-sm font-semibold">
-                        {currency.format(product.price)}
+                        {formatCurrency(product.price)}
                         {product.large_price !== null &&
-                          ` / ${currency.format(product.large_price)}`}
+                          ` / ${formatCurrency(product.large_price)}`}
                         {!product.active && (
                           <span className="ml-2 text-xs font-normal text-[#9a6555]">
                             Unavailable
@@ -791,9 +792,9 @@ export default function MenuManagerClient() {
                         )}
                       </p>
                       <p className="text-xs text-[#88847b]">
-                        Item cost: {product.unit_cost === null ? "Not set" : currency.format(product.unit_cost)}
+                        Item cost: {product.unit_cost === null ? "Not set" : formatCurrency(product.unit_cost)}
                         {product.large_price !== null &&
-                          ` / ${product.large_unit_cost === null ? "Not set" : currency.format(product.large_unit_cost)}`}
+                          ` / ${product.large_unit_cost === null ? "Not set" : formatCurrency(product.large_unit_cost)}`}
                       </p>
                     </div>
                   </div>

@@ -2,9 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import ManagementSidebar from "../management-sidebar";
+import { useStoreSettings } from "@/lib/store-settings";
 
 type TopProduct = {
   id: string;
@@ -240,6 +240,7 @@ export default function DashboardClient({
   email: string;
   role: "manager" | "admin";
 }) {
+  const { formatCurrency, settings } = useStoreSettings();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -362,7 +363,7 @@ export default function DashboardClient({
   const cards = [
     {
       label: "Total revenue · 7 days",
-      value: metrics ? currency.format(metrics.revenue) : "—",
+      value: metrics ? formatCurrency(metrics.revenue) : "—",
       icon: "↗",
     },
     {
@@ -372,13 +373,13 @@ export default function DashboardClient({
     },
     {
       label: "Gross profit · 7 days",
-      value: metrics ? currency.format(metrics.grossProfit) : "—",
+      value: metrics ? formatCurrency(metrics.grossProfit) : "—",
       icon: "◉",
     },
     {
       label: "Net profit · 7 days",
-      value: metrics ? currency.format(metrics.netProfit) : "—",
-      icon: "₱",
+      value: metrics ? formatCurrency(metrics.netProfit) : "—",
+      icon: settings.currencySymbol,
     },
   ];
 
@@ -392,7 +393,7 @@ export default function DashboardClient({
             </div>
             <div>
               <p className="font-semibold tracking-tight text-cafe-espresso">
-                KAPE NA NAMAN
+                {settings.storeName}
               </p>
               <p className="text-xs text-cafe-muted">Business overview</p>
             </div>
@@ -516,16 +517,16 @@ export default function DashboardClient({
                   const highest = Math.max(...metrics.salesByDay.flatMap((day) => [day.sales, day.cost]), 1);
                   return metrics.salesByDay.map((day) => (
                     <div key={day.date} className="flex h-full min-w-0 flex-col items-center justify-end gap-2">
-                      <div className="flex h-[65%] w-full max-w-16 items-end justify-center gap-1" title={`${day.orders} orders · Revenue ${currency.format(day.sales)} · Ingredient cost ${currency.format(day.cost)}`}>
+                      <div className="flex h-[65%] w-full max-w-16 items-end justify-center gap-1" title={`${day.orders} orders · Revenue ${formatCurrency(day.sales)} · Ingredient cost ${formatCurrency(day.cost)}`}>
                         <div
                           className="w-1/2 rounded-t-md bg-cafe-sage-dark"
                           style={{ height: `${Math.max(day.sales > 0 ? 3 : 0, (day.sales / highest) * 100)}%` }}
-                          aria-label={`${dayLabel.format(new Date(`${day.date}T00:00:00Z`))} revenue ${currency.format(day.sales)}`}
+                          aria-label={`${dayLabel.format(new Date(`${day.date}T00:00:00Z`))} revenue ${formatCurrency(day.sales)}`}
                         />
                         <div
                           className="w-1/2 rounded-t-md bg-[#c99556]"
                           style={{ height: `${Math.max(day.cost > 0 ? 3 : 0, (day.cost / highest) * 100)}%` }}
-                          aria-label={`${dayLabel.format(new Date(`${day.date}T00:00:00Z`))} ingredient cost ${currency.format(day.cost)}`}
+                          aria-label={`${dayLabel.format(new Date(`${day.date}T00:00:00Z`))} ingredient cost ${formatCurrency(day.cost)}`}
                         />
                       </div>
                       <span className="text-xs font-medium text-cafe-muted">
@@ -555,12 +556,12 @@ export default function DashboardClient({
               <p role="status" className="py-8 text-center text-sm text-cafe-muted">Loading profit...</p>
             ) : metrics ? (
               <dl className="space-y-3 text-sm">
-                <div className="flex justify-between gap-3"><dt>Revenue</dt><dd className="font-medium">{currency.format(metrics.revenue)}</dd></div>
-                <div className="flex justify-between gap-3 text-[#9a5143]"><dt>Refunds</dt><dd>−{currency.format(metrics.refunds)}</dd></div>
-                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3"><dt>Cost of goods sold</dt><dd>−{currency.format(metrics.costOfGoodsSold)}</dd></div>
-                <div className="flex justify-between gap-3 font-semibold"><dt>Gross profit</dt><dd>{currency.format(metrics.grossProfit)}</dd></div>
-                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3 text-[#9a5143]"><dt>Expenses</dt><dd>−{currency.format(metrics.expenses)}</dd></div>
-                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3 text-base font-semibold text-cafe-espresso"><dt>Net profit</dt><dd>{currency.format(metrics.netProfit)}</dd></div>
+                <div className="flex justify-between gap-3"><dt>Revenue</dt><dd className="font-medium">{formatCurrency(metrics.revenue)}</dd></div>
+                <div className="flex justify-between gap-3 text-[#9a5143]"><dt>Refunds</dt><dd>−{formatCurrency(metrics.refunds)}</dd></div>
+                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3"><dt>Cost of goods sold</dt><dd>−{formatCurrency(metrics.costOfGoodsSold)}</dd></div>
+                <div className="flex justify-between gap-3 font-semibold"><dt>Gross profit</dt><dd>{formatCurrency(metrics.grossProfit)}</dd></div>
+                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3 text-[#9a5143]"><dt>Expenses</dt><dd>−{formatCurrency(metrics.expenses)}</dd></div>
+                <div className="flex justify-between gap-3 border-t border-cafe-border pt-3 text-base font-semibold text-cafe-espresso"><dt>Net profit</dt><dd>{formatCurrency(metrics.netProfit)}</dd></div>
               </dl>
             ) : (
               <p className="py-8 text-center text-sm text-cafe-muted">Profit data is unavailable.</p>
@@ -613,7 +614,7 @@ export default function DashboardClient({
                 <select id="refund-order" required value={refundOrderId} onChange={(event) => setRefundOrderId(event.target.value)} className="h-10 w-full rounded-lg border border-cafe-border bg-white px-3 text-sm">
                   <option value="">Choose an order</option>
                   {metrics?.refundableOrders.map((order) => (
-                    <option key={order.id} value={order.id}>#{order.id.slice(0, 8)} · {currency.format(order.remaining)} remaining</option>
+                    <option key={order.id} value={order.id}>#{order.id.slice(0, 8)} · {formatCurrency(order.remaining)} remaining</option>
                   ))}
                 </select>
                 <label className="sr-only" htmlFor="refund-amount">Refund amount in PHP</label>
@@ -670,7 +671,7 @@ export default function DashboardClient({
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold">{product.quantity} sold</p>
                       <p className="text-xs text-cafe-muted">
-                        {currency.format(product.sales)}
+                        {formatCurrency(product.sales)}
                       </p>
                     </div>
                   </li>
@@ -721,7 +722,7 @@ export default function DashboardClient({
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold">
-                        {currency.format(order.total)}
+                        {formatCurrency(order.total)}
                       </p>
                       <p className="text-xs text-cafe-muted">
                         {transactionDate.format(new Date(order.createdAt))}

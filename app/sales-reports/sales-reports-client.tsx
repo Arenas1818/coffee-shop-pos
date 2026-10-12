@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import ManagementSidebar from "../management-sidebar";
+import { useStoreSettings } from "@/lib/store-settings";
 
 type PaymentSummary = {
   method: string;
@@ -128,6 +128,7 @@ export default function SalesReportsClient({
   role: "manager" | "admin";
   email: string;
 }) {
+  const { formatCurrency, settings } = useStoreSettings();
   const [initialRange] = useState(defaultDateRange);
   const [fromDate, setFromDate] = useState(initialRange.from);
   const [toDate, setToDate] = useState(initialRange.to);
@@ -175,17 +176,17 @@ export default function SalesReportsClient({
   function downloadCsv() {
     if (!report) return;
     const rows: (string | number)[][] = [
-      ["KAPE NA NAMAN - SALES REPORT"],
+      [`${settings.storeName} - SALES REPORT`],
       ["Date range", report.from, report.to],
       [],
       ["Summary"],
-      ["Revenue (PHP)", report.revenue.toFixed(2)],
+      [`Revenue (${settings.currencySymbol})`, report.revenue.toFixed(2)],
       ["Orders", report.orderCount],
       ["Average orders per day", report.averageOrdersPerDay.toFixed(2)],
       ["Items sold", report.itemsSold],
       [],
       ["Payment methods"],
-      ["Payment method", "Transactions", "Amount received (PHP)"],
+      ["Payment method", "Transactions", `Amount received (${settings.currencySymbol})`],
       ...report.paymentMethods.map((payment) => [
         paymentMethodLabels[payment.method] ?? payment.method,
         payment.transactionCount,
@@ -211,7 +212,7 @@ export default function SalesReportsClient({
   }
 
   const summaryCards = [
-    { label: "Filtered revenue", value: currency.format(report?.revenue ?? 0) },
+    { label: "Filtered revenue", value: formatCurrency(report?.revenue ?? 0) },
     { label: "Orders", value: String(report?.orderCount ?? 0) },
     {
       label: "Average orders per day",
@@ -230,7 +231,7 @@ export default function SalesReportsClient({
             </div>
             <div>
               <p className="font-semibold tracking-tight text-cafe-espresso">
-                KAPE NA NAMAN
+                {settings.storeName}
               </p>
               <p className="text-xs text-cafe-muted">Sales reports</p>
             </div>
@@ -344,7 +345,7 @@ export default function SalesReportsClient({
 
           <div className="sales-report-print-target">
             <div className="mb-5 hidden print:block">
-              <h1 className="text-2xl font-bold">KAPE NA NAMAN · Sales Report</h1>
+              <h1 className="text-2xl font-bold">{settings.storeName} · Sales Report</h1>
               <p className="mt-1 text-sm">
                 Date range: {report?.from} to {report?.to} (Asia/Manila)
               </p>
@@ -403,7 +404,7 @@ export default function SalesReportsClient({
                             {payment.transactionCount}
                           </td>
                           <td className="py-3 text-right font-semibold">
-                            {currency.format(payment.amountReceived)}
+                            {formatCurrency(payment.amountReceived)}
                           </td>
                         </tr>
                       ))}

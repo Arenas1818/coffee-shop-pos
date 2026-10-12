@@ -34,6 +34,8 @@ printable receipt.
    - `supabase/migrations/20261013000600_register_transaction_receipts.sql`
    - `supabase/migrations/20261013000700_sales_reports.sql`
    - `supabase/migrations/20261013000800_fix_sales_report_date_series.sql`
+   - `supabase/migrations/20261013000900_store_settings.sql`
+   - `supabase/migrations/20261013001000_landing_background_video.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -66,12 +68,17 @@ printable receipt.
    [http://localhost:3000](http://localhost:3000).
 
 Managers and admins can use the management sidebar for the dashboard,
-sales reports, inventory, products, customers, and employees. Sales Reports
+sales reports, inventory, products, customers, employees, and Settings.
+Settings controls store name, address, phone, receipt footer, tax rate,
+currency symbol, global low-stock threshold fallback, and the optional landing
+video upload. The uploaded MP4 or WebM video is stored in Supabase Storage,
+limited to 50 MB, and plays muted behind the sign-in page. Tax changes affect
+new orders only. Sales Reports
 can filter date ranges, show revenue, order count, average orders per day,
 items sold, and amount received by payment method, and export the report to
 CSV or print/save it as PDF. Report dates use Philippines time. Every active
-menu product is automatically linked to inventory. Products without a recipe deduct finished
-product stock at checkout; products with a recipe deduct each recipe supply
+menu product is automatically linked to inventory. Products without a recipe
+deduct finished product stock at checkout; products with a recipe deduct each recipe supply
 atomically instead. Insufficient ingredient or product stock prevents checkout.
 Checkout requires a payment method. Cash requires an amount received at least
 equal to the order total and calculates change; Card and E-wallet are recorded

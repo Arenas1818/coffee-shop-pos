@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { currency } from "@/lib/currency";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { useStoreSettings } from "@/lib/store-settings";
 
 type RefundableOrder = {
   id: string;
@@ -159,6 +159,7 @@ export default function RegisterFinancialActivity({
 }: {
   role: "staff" | "manager" | "admin";
 }) {
+  const { formatCurrency, settings } = useStoreSettings();
   const [activity, setActivity] = useState<RegisterActivity | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<RecentOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -444,7 +445,7 @@ export default function RegisterFinancialActivity({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold">
-                      {currency.format(order.total)}
+                      {formatCurrency(order.total)}
                     </p>
                     <p className="text-xs text-cafe-muted">
                       {transactionDate.format(new Date(order.createdAt))}
@@ -511,9 +512,11 @@ export default function RegisterFinancialActivity({
             <div className="receipt-content">
               <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
                 <h3 className="text-lg font-bold tracking-wide">
-                  KAPE NA NAMAN
+                  {settings.storeName}
                 </h3>
                 <p className="mt-1 text-sm">Point of sale receipt</p>
+                {settings.address && <p className="mt-1 text-xs">{settings.address}</p>}
+                {settings.phone && <p className="mt-1 text-xs">{settings.phone}</p>}
                 <p className="mt-2 break-all text-xs">
                   Order: {selectedOrder.id}
                 </p>
@@ -534,7 +537,7 @@ export default function RegisterFinancialActivity({
                     <span className="whitespace-nowrap">
                       {item.unitPrice === null
                         ? "—"
-                        : currency.format(item.unitPrice * item.quantity)}
+                        : formatCurrency(item.unitPrice * item.quantity)}
                     </span>
                   </li>
                 ))}
@@ -542,23 +545,23 @@ export default function RegisterFinancialActivity({
               <dl className="space-y-2 py-4 text-sm">
                 <div className="flex justify-between">
                   <dt>Subtotal</dt>
-                  <dd>{currency.format(selectedOrder.subtotal)}</dd>
+                  <dd>{formatCurrency(selectedOrder.subtotal)}</dd>
                 </div>
                 {selectedOrder.discountType && (
                   <div className="flex justify-between">
                     <dt>
                       {transactionDiscountLabels[selectedOrder.discountType]}
                     </dt>
-                    <dd>−{currency.format(selectedOrder.discountAmount)}</dd>
+                    <dd>−{formatCurrency(selectedOrder.discountAmount)}</dd>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <dt>Tax</dt>
-                  <dd>{currency.format(selectedOrder.tax)}</dd>
+                  <dd>{formatCurrency(selectedOrder.tax)}</dd>
                 </div>
                 <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
                   <dt>Total</dt>
-                  <dd>{currency.format(selectedOrder.total)}</dd>
+                  <dd>{formatCurrency(selectedOrder.total)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Payment method</dt>
@@ -567,7 +570,7 @@ export default function RegisterFinancialActivity({
                 {selectedOrder.amountReceived !== null && (
                   <div className="flex justify-between">
                     <dt>Amount received</dt>
-                    <dd>{currency.format(selectedOrder.amountReceived)}</dd>
+                    <dd>{formatCurrency(selectedOrder.amountReceived)}</dd>
                   </div>
                 )}
                 {selectedOrder.paymentMethod === "cash" &&
@@ -575,7 +578,7 @@ export default function RegisterFinancialActivity({
                     <div className="flex justify-between">
                       <dt>Change</dt>
                       <dd>
-                        {currency.format(
+                        {formatCurrency(
                           selectedOrder.amountReceived - selectedOrder.total,
                         )}
                       </dd>
@@ -583,7 +586,7 @@ export default function RegisterFinancialActivity({
                   )}
               </dl>
               <p className="border-t border-dashed border-[#bdb6aa] pt-4 text-center text-xs">
-                Thank you for your order!
+                {settings.receiptFooter}
               </p>
             </div>
             <div className="mt-6 flex gap-3 print:hidden">
@@ -655,7 +658,7 @@ export default function RegisterFinancialActivity({
                   {activity?.refundableOrders.map((order) => (
                     <option key={order.id} value={order.id}>
                       #{order.id.slice(0, 8)} ·{" "}
-                      {currency.format(order.remaining)} remaining
+                      {formatCurrency(order.remaining)} remaining
                     </option>
                   ))}
                 </select>

@@ -49,7 +49,7 @@ type CartItem = {
 };
 
 type PaymentMethod = "cash" | "card" | "e_wallet";
-type DiscountType = "pwd" | "senior";
+type DiscountType = "pwd_senior";
 
 type Receipt = {
   orderId: string;
@@ -76,10 +76,7 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   e_wallet: "E-wallet",
 };
 
-const discountLabels: Record<DiscountType, string> = {
-  pwd: "PWD",
-  senior: "Senior Citizen",
-};
+const discountLabel = "PWD / Senior Citizen";
 
 function parseProducts(rows: unknown): Product[] {
   if (!Array.isArray(rows)) {
@@ -234,8 +231,15 @@ export default function PosClient({
     (amountReceived.trim() !== "" &&
       Number.isFinite(cashAmountReceived) &&
       cashAmountReceived >= total);
+  const isCheckoutDisabled =
+    cart.length === 0 ||
+    isSavingOrder ||
+    !isPaymentValid ||
+    isLoadingSettings ||
+    Boolean(storeSettingsError);
 
   function addToCart(product: Product, size: "regular" | "large" = "regular") {
+    setOrderError("");
     setCart((currentCart) => {
       const existingItem = currentCart.find(
         (item) => item.product.id === product.id && item.size === size,
@@ -351,24 +355,26 @@ export default function PosClient({
 
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
-      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(74,52,40,0.04)]">
+      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(16,42,67,0.06)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cafe-espresso text-xl text-[#fffaf0] shadow-sm">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cafe-espresso text-xl text-white shadow-sm">
               ☕
             </div>
             <div>
               <p className="font-semibold tracking-tight text-cafe-espresso">
                 {settings.storeName}
               </p>
-              <p className="text-xs text-cafe-muted">Point of sale</p>
+              <p className="text-xs text-cafe-muted">
+                System by: Apatnatwo-gether
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {role !== "staff" && (
               <Link
                 href="/dashboard"
-                className="rounded-lg border border-cafe-border bg-[#f8f4ec] px-3 py-2 text-sm font-medium text-cafe-espresso transition hover:border-[#cfc2af] hover:bg-[#f0e8db]"
+                className="rounded-lg border border-cafe-border bg-cafe-surface-soft px-3 py-2 text-sm font-medium text-cafe-espresso transition hover:border-cafe-sage hover:bg-cafe-accent-soft"
               >
                 Management
               </Link>
@@ -377,7 +383,7 @@ export default function PosClient({
               <p className="text-sm font-medium">{email}</p>
               <p className="text-xs capitalize text-cafe-muted">{role}</p>
             </div>
-            <span className="rounded-full bg-[#eee5d7] px-3 py-1.5 text-xs font-semibold capitalize text-cafe-espresso sm:hidden">
+            <span className="rounded-full bg-cafe-surface-soft px-3 py-1.5 text-xs font-semibold capitalize text-cafe-espresso sm:hidden">
               {role}
             </span>
             <button
@@ -391,19 +397,19 @@ export default function PosClient({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1440px] gap-6 px-5 py-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:py-8">
+      <div className="mx-auto grid max-w-[1440px] gap-6 px-5 py-6 pb-28 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:py-8 lg:pb-8">
         <section aria-labelledby="menu-heading">
-          <div className="mb-6 rounded-3xl bg-[#eee5d7] px-6 py-7 sm:px-8 sm:py-9">
-            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cafe-sage-dark">
+          <div className="mb-6 rounded-3xl bg-gradient-to-br from-[#102a43] to-[#155e63] px-6 py-7 text-white shadow-[0_14px_32px_rgba(16,42,67,0.14)] sm:px-8 sm:py-9">
+            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-[#b7e5de]">
               FRESHLY MADE, JUST FOR YOU
             </p>
             <h1
               id="menu-heading"
-              className="text-3xl font-semibold tracking-tight text-cafe-espresso sm:text-4xl"
+              className="text-3xl font-semibold tracking-tight text-white sm:text-4xl"
             >
               Your daily ritual.
             </h1>
-            <p className="mt-2 text-sm text-[#75695d]">
+            <p className="mt-2 text-sm text-[#d8e4e9]">
               What can we make for you today?
             </p>
           </div>
@@ -412,16 +418,26 @@ export default function PosClient({
             <span aria-hidden="true">⌕</span>
             <span className="sr-only">Search the menu</span>
             <input
+              aria-label="Search menu items"
               className="h-full w-full bg-transparent text-sm text-[#342a22] outline-none placeholder:text-[#a39789]"
               placeholder="Search coffee, tea, bakery..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-cafe-sage-dark hover:bg-[#f3f4ed]"
+              >
+                Clear
+              </button>
+            )}
           </label>
 
           <div
             aria-label="Menu categories"
-            className="mb-6 flex gap-2 overflow-x-auto pb-1"
+            className="mb-4 flex gap-2 overflow-x-auto pb-1"
           >
             {categories.map((category) => (
               <button
@@ -429,16 +445,22 @@ export default function PosClient({
                 type="button"
                 aria-pressed={activeCategory === category}
                 onClick={() => setActiveCategory(category)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-11 shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   activeCategory === category
                     ? "bg-cafe-sage-dark text-white shadow-sm"
-                    : "border border-cafe-border bg-cafe-card text-[#6e6256] hover:bg-[#eee5d7]"
+                    : "border border-cafe-border bg-cafe-card text-cafe-muted hover:bg-cafe-surface-soft"
                 }`}
               >
                 {category}
               </button>
             ))}
           </div>
+          {!isLoadingMenu && !menuError && (
+            <p className="mb-4 text-xs text-cafe-muted" aria-live="polite">
+              Showing {visibleProducts.length} of {products.length} menu{" "}
+              {products.length === 1 ? "item" : "items"}
+            </p>
+          )}
 
           {menuError ? (
             <div
@@ -466,7 +488,7 @@ export default function PosClient({
                       ? addToCart(product)
                       : setSizeSelection(product)
                   }
-                  className="group rounded-2xl border border-cafe-border bg-cafe-card p-3 text-left shadow-[0_3px_14px_rgba(74,52,40,0.035)] transition hover:-translate-y-0.5 hover:border-[#bdc6b5] hover:shadow-[0_10px_24px_rgba(74,52,40,0.1)]"
+                  className="group min-h-64 rounded-2xl border border-cafe-border bg-cafe-card p-3 text-left shadow-[0_3px_14px_rgba(74,52,40,0.035)] transition hover:-translate-y-0.5 hover:border-[#bdc6b5] hover:shadow-[0_10px_24px_rgba(74,52,40,0.1)]"
                 >
                   <div
                     className={`flex h-32 items-center justify-center rounded-xl text-5xl ${productColors[product.color]}`}
@@ -516,14 +538,14 @@ export default function PosClient({
                 {itemCount} {itemCount === 1 ? "item" : "items"}
               </p>
             </div>
-            <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-[#eee5d7] px-2 text-sm font-semibold text-cafe-espresso">
+            <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-cafe-accent-soft px-2 text-sm font-semibold text-cafe-sage-dark">
               {itemCount}
             </span>
           </div>
 
           {cart.length === 0 ? (
             <div className="py-12 text-center">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#eee5d7] text-2xl">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-cafe-surface-soft text-2xl">
                 🛍️
               </div>
               <p className="font-medium">Your order is empty</p>
@@ -556,7 +578,7 @@ export default function PosClient({
                       type="button"
                       aria-label={`Remove one ${size} ${product.name}`}
                       onClick={() => changeQuantity(product.id, size, -1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-cafe-border text-cafe-espresso transition hover:bg-[#eee5d7]"
+                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-cafe-border text-lg text-cafe-espresso transition hover:bg-cafe-surface-soft"
                     >
                       −
                     </button>
@@ -565,7 +587,7 @@ export default function PosClient({
                       type="button"
                       aria-label={`Add one ${size} ${product.name}`}
                       onClick={() => changeQuantity(product.id, size, 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-cafe-border text-cafe-espresso transition hover:bg-[#eee5d7]"
+                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-cafe-border text-lg text-cafe-espresso transition hover:bg-cafe-surface-soft"
                     >
                       +
                     </button>
@@ -576,33 +598,23 @@ export default function PosClient({
           )}
 
           <div className="mt-5 border-t border-cafe-border pt-5">
-            <p className="mb-3 text-sm font-medium">PWD / Senior Citizen discount</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  ["pwd", "PWD · 10%"],
-                  ["senior", "Senior · 10%"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={discountType === value}
-                  onClick={() =>
-                    setDiscountType((current) =>
-                      current === value ? null : value,
-                    )
-                  }
-                  className={`h-10 rounded-lg border px-3 text-sm font-medium ${
-                    discountType === value
-                      ? "border-cafe-sage-dark bg-cafe-sage-dark text-white"
-                      : "border-cafe-border bg-white text-cafe-espresso"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <p className="mb-3 text-sm font-medium">Eligible discount</p>
+            <button
+              type="button"
+              aria-pressed={discountType === "pwd_senior"}
+              onClick={() =>
+                setDiscountType((current) =>
+                  current === "pwd_senior" ? null : "pwd_senior",
+                )
+              }
+              className={`min-h-11 w-full rounded-lg border px-3 text-sm font-medium ${
+                discountType === "pwd_senior"
+                  ? "border-cafe-sage-dark bg-cafe-sage-dark text-white"
+                  : "border-cafe-border bg-white text-cafe-espresso"
+              }`}
+            >
+              PWD / Senior Citizen · 10%
+            </button>
             {discountType && (
               <p className="mt-2 text-xs text-cafe-muted">
                 10% discount: {formatCurrency(discountAmount)}
@@ -617,7 +629,7 @@ export default function PosClient({
             </div>
             {discountType && (
               <div className="flex justify-between text-cafe-sage-dark">
-                <span>{discountLabels[discountType]} discount (10%)</span>
+                <span>{discountLabel} discount (10%)</span>
                 <span>−{formatCurrency(discountAmount)}</span>
               </div>
             )}
@@ -712,13 +724,7 @@ export default function PosClient({
 
           <button
             type="button"
-            disabled={
-              cart.length === 0 ||
-              isSavingOrder ||
-              !isPaymentValid ||
-              isLoadingSettings ||
-              Boolean(storeSettingsError)
-            }
+            disabled={isCheckoutDisabled}
             onClick={placeOrder}
             className="mt-5 flex h-12 w-full items-center justify-center rounded-xl bg-cafe-sage-dark px-4 font-medium text-white transition hover:bg-[#43563d] disabled:cursor-not-allowed disabled:bg-[#b8beb5]"
           >
@@ -730,6 +736,23 @@ export default function PosClient({
           </button>
         </aside>
       </div>
+      {cart.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-cafe-border bg-cafe-card/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(74,52,40,0.12)] backdrop-blur lg:hidden">
+          <button
+            type="button"
+            disabled={isCheckoutDisabled}
+            onClick={() => void placeOrder()}
+            className="flex h-12 w-full items-center justify-between rounded-xl bg-cafe-sage-dark px-4 font-semibold text-white transition hover:bg-[#43563d] disabled:cursor-not-allowed disabled:bg-[#b8beb5]"
+          >
+            <span>
+              {isSavingOrder
+                ? "Completing order..."
+                : `Checkout · ${itemCount} ${itemCount === 1 ? "item" : "items"}`}
+            </span>
+            <span>{formatCurrency(total)}</span>
+          </button>
+        </div>
+      )}
       <RegisterFinancialActivity role={role} />
       {receipt && (
         <div className="receipt-overlay fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-[#241b15]/60 px-4 py-8">
@@ -800,7 +823,7 @@ export default function PosClient({
                 </div>
                 {receipt.discountType && (
                   <div className="flex justify-between">
-                    <dt>{discountLabels[receipt.discountType]} discount (10%)</dt>
+                    <dt>{discountLabel} discount (10%)</dt>
                     <dd>−{formatCurrency(receipt.discountAmount)}</dd>
                   </div>
                 )}

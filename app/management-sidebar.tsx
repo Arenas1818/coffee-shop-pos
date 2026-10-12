@@ -40,8 +40,8 @@ export default function ManagementSidebar({
               aria-current={isActive ? "page" : undefined}
               className={`flex shrink-0 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition lg:w-full ${
                 isActive
-                  ? "bg-[#e9eddf] text-cafe-sage-dark"
-                  : "text-[#6e6256] hover:bg-[#f3eee5] hover:text-cafe-espresso"
+                  ? "bg-cafe-accent-soft text-cafe-sage-dark"
+                  : "text-cafe-muted hover:bg-cafe-surface-soft hover:text-cafe-espresso"
               }`}
             >
               <span aria-hidden="true" className="w-5 text-center text-base">
@@ -55,7 +55,7 @@ export default function ManagementSidebar({
       <div className="mt-7 hidden border-t border-cafe-border pt-5 lg:block">
         <Link
           href="/"
-          className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-[#6e6256] transition hover:bg-[#f3eee5] hover:text-cafe-espresso"
+          className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-cafe-muted transition hover:bg-cafe-surface-soft hover:text-cafe-espresso"
         >
           <span aria-hidden="true" className="w-5 text-center text-base">
             ←

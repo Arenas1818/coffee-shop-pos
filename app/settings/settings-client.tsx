@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import ManagementSidebar from "../management-sidebar";
 import { useStoreSettings, type StoreSettings } from "@/lib/store-settings";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -17,6 +17,8 @@ export default function SettingsClient({
   const [form, setForm] = useState<StoreSettings>(settings);
   const [isSaving, setIsSaving] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
+  const videoPreviewUrlRef = useRef<string | null>(null);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [notice, setNotice] = useState("");
@@ -25,6 +27,25 @@ export default function SettingsClient({
     const syncForm = window.setTimeout(() => setForm(settings), 0);
     return () => window.clearTimeout(syncForm);
   }, [settings]);
+
+  useEffect(
+    () => () => {
+      if (videoPreviewUrlRef.current) {
+        URL.revokeObjectURL(videoPreviewUrlRef.current);
+      }
+    },
+    [],
+  );
+
+  function selectVideoFile(file: File | null) {
+    if (videoPreviewUrlRef.current) {
+      URL.revokeObjectURL(videoPreviewUrlRef.current);
+    }
+    const previewUrl = file ? URL.createObjectURL(file) : "";
+    videoPreviewUrlRef.current = previewUrl || null;
+    setVideoPreviewUrl(previewUrl);
+    setVideoFile(file);
+  }
 
   function update<K extends keyof StoreSettings>(
     key: K,
@@ -125,7 +146,7 @@ export default function SettingsClient({
       };
       setForm(updatedForm);
       setSettings(updatedForm);
-      setVideoFile(null);
+      selectVideoFile(null);
       await refreshSettings();
       if (oldPath && oldPath !== newPath) {
         const { error: removeError } = await supabase.storage
@@ -160,7 +181,7 @@ export default function SettingsClient({
 
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
-      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(74,52,40,0.04)]">
+      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(16,42,67,0.06)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div>
             <p className="font-semibold tracking-tight text-cafe-espresso">
@@ -177,16 +198,16 @@ export default function SettingsClient({
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 px-5 py-5 sm:px-8 lg:flex-row lg:gap-0 lg:px-0 lg:py-0">
         <ManagementSidebar role={role} />
         <div className="min-w-0 flex-1 px-0 py-2 sm:py-4 lg:px-8 lg:py-8">
-          <section className="mb-6 rounded-3xl bg-[#eee5d7] px-6 py-7 sm:px-8">
-            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cafe-sage-dark">
+          <section className="mb-6 rounded-3xl bg-gradient-to-br from-[#102a43] to-[#155e63] px-6 py-7 text-white shadow-[0_14px_32px_rgba(16,42,67,0.14)] sm:px-8">
+            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-[#b7e5de]">
               MANAGEMENT WORKSPACE
             </p>
-            <h1 className="text-3xl font-semibold tracking-tight text-cafe-espresso">
+            <h1 className="text-3xl font-semibold tracking-tight text-white">
               Settings
             </h1>
-            <p className="mt-2 text-sm text-[#75695d]">
-              Configure store details, checkout tax, currency display, and
-              inventory alerts.
+            <p className="mt-2 text-sm text-[#d8e4e9]">
+              Manage store identity, checkout defaults, inventory alerts, and
+              the sign-in page.
             </p>
           </section>
 
@@ -220,8 +241,11 @@ export default function SettingsClient({
           >
             <section className="rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-[0_3px_14px_rgba(74,52,40,0.035)] sm:p-6">
               <h2 className="mb-5 text-lg font-semibold text-cafe-espresso">
-                Store Information
+                Store information
               </h2>
+              <p className="mb-5 text-sm text-cafe-muted">
+                These details appear on staff screens and customer receipts.
+              </p>
               <div className="space-y-4">
                 <label className={labelClass}>
                   Store name
@@ -269,8 +293,11 @@ export default function SettingsClient({
 
             <section className="flex flex-col rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-[0_3px_14px_rgba(74,52,40,0.035)] sm:p-6">
               <h2 className="mb-5 text-lg font-semibold text-cafe-espresso">
-                Operations
+                Checkout &amp; inventory
               </h2>
+              <p className="mb-5 text-sm text-cafe-muted">
+                Defaults used for new orders and low-stock alerts.
+              </p>
               <div className="space-y-4">
                 <label className={labelClass}>
                   Tax rate (%)
@@ -325,20 +352,48 @@ export default function SettingsClient({
                     threshold.
                   </span>
                 </label>
-                <div className="rounded-xl border border-cafe-border bg-[#f8f4ec] p-4">
-                  <h3 className="text-sm font-semibold text-cafe-espresso">
-                    Landing background video
-                  </h3>
-                  <p className="mt-1 text-xs text-cafe-muted">
-                    Upload an MP4 or WebM video (maximum 50 MB) to display
-                    behind the staff sign-in page.
-                  </p>
+              </div>
+              <button
+                type="submit"
+                disabled={isSaving || isUploadingVideo}
+                className="mt-auto flex h-11 w-full items-center justify-center rounded-xl bg-cafe-sage-dark px-4 font-medium text-white disabled:opacity-60"
+              >
+                {isSaving ? "Saving settings..." : "Save Settings"}
+              </button>
+            </section>
+
+            <section className="rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-[0_3px_14px_rgba(74,52,40,0.035)] sm:p-6 xl:col-span-2">
+              <div className="mb-5">
+                <h2 className="text-lg font-semibold text-cafe-espresso">
+                  Sign-in page
+                </h2>
+                <p className="mt-1 text-sm text-cafe-muted">
+                  Preview a muted looping background video before applying it
+                  to the staff sign-in page.
+                </p>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div className="space-y-4">
+                  <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-cafe-muted">
+                    Video file
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,.mp4,.webm"
+                      onChange={(event) =>
+                        selectVideoFile(event.target.files?.[0] ?? null)
+                      }
+                      className="mt-1.5 block w-full text-sm normal-case tracking-normal file:mr-3 file:rounded-lg file:border-0 file:bg-[#f8f4ec] file:px-3 file:py-2 file:text-sm file:font-medium"
+                    />
+                    <span className="mt-1 block text-xs font-normal normal-case tracking-normal">
+                      MP4 or WebM, up to 50 MB.
+                    </span>
+                  </label>
                   {form.backgroundVideoPath && (
-                    <p className="mt-2 break-all text-xs text-cafe-sage-dark">
-                      Current video: {form.backgroundVideoPath}
+                    <p className="break-all rounded-lg bg-[#f8f4ec] px-3 py-2 text-xs text-cafe-muted">
+                      Applied video: {form.backgroundVideoPath}
                     </p>
                   )}
-                  <label className="mt-3 flex items-center gap-2 text-sm text-cafe-espresso">
+                  <label className="flex min-h-11 items-center gap-3 rounded-lg border border-cafe-border px-3 text-sm text-cafe-espresso">
                     <input
                       type="checkbox"
                       checked={form.backgroundVideoEnabled}
@@ -350,34 +405,43 @@ export default function SettingsClient({
                     />
                     Enable background video on sign-in page
                   </label>
-                  <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.08em] text-cafe-muted">
-                    Video file
-                    <input
-                      type="file"
-                      accept="video/mp4,video/webm,.mp4,.webm"
-                      onChange={(event) =>
-                        setVideoFile(event.target.files?.[0] ?? null)
-                      }
-                      className="mt-1.5 block w-full text-sm normal-case tracking-normal file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium"
-                    />
-                  </label>
                   <button
                     type="button"
                     disabled={!videoFile || isUploadingVideo}
                     onClick={() => void uploadAndApplyVideo()}
-                    className="mt-3 h-10 w-full rounded-lg border border-cafe-border bg-white px-4 text-sm font-medium text-cafe-espresso disabled:opacity-60"
+                    className="h-11 w-full rounded-lg bg-cafe-sage-dark px-4 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {isUploadingVideo ? "Uploading and applying..." : "Upload & Apply"}
+                    {isUploadingVideo
+                      ? "Uploading and applying..."
+                      : "Upload & Apply"}
                   </button>
                 </div>
+                <div className="overflow-hidden rounded-xl border border-cafe-border bg-[#f8f4ec]">
+                  {videoPreviewUrl ? (
+                    <video
+                      key={videoPreviewUrl}
+                      aria-label="Preview of selected sign-in background video"
+                      controls
+                      muted
+                      playsInline
+                      className="aspect-video w-full bg-[#241b15] object-contain"
+                    >
+                      <source
+                        src={videoPreviewUrl}
+                        type={videoFile?.type || "video/mp4"}
+                      />
+                    </video>
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-cafe-muted">
+                      Choose a video file to preview it here before uploading.
+                    </div>
+                  )}
+                  <p className="px-4 py-3 text-xs text-cafe-muted">
+                    The sign-in page applies its own soft overlay so the form
+                    remains readable.
+                  </p>
+                </div>
               </div>
-              <button
-                type="submit"
-                disabled={isSaving || isUploadingVideo}
-                className="mt-auto flex h-11 w-full items-center justify-center rounded-xl bg-cafe-sage-dark px-4 font-medium text-white disabled:opacity-60"
-              >
-                {isSaving ? "Saving settings..." : "Save Settings"}
-              </button>
             </section>
           </form>
         </div>

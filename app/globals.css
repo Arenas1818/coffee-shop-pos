@@ -2,15 +2,17 @@
 
 :root {
   color-scheme: light;
-  --background: #f5f0e7;
-  --foreground: #342a22;
-  --cafe-cream: #f5f0e7;
-  --cafe-card: #fffdf9;
-  --cafe-border: #e8dfd2;
-  --cafe-muted: #82776b;
-  --cafe-sage: #687b61;
-  --cafe-sage-dark: #506348;
-  --cafe-espresso: #4a3428;
+  --background: #f3f6f8;
+  --foreground: #14212b;
+  --cafe-cream: #f3f6f8;
+  --cafe-card: #ffffff;
+  --cafe-border: #d7e0e6;
+  --cafe-muted: #526171;
+  --cafe-sage: #0f766e;
+  --cafe-sage-dark: #115e59;
+  --cafe-espresso: #102a43;
+  --cafe-accent-soft: #e4f3f1;
+  --cafe-surface-soft: #eaf0f4;
 }
 
 @theme inline {
@@ -23,6 +25,8 @@
   --color-cafe-sage: var(--cafe-sage);
   --color-cafe-sage-dark: var(--cafe-sage-dark);
   --color-cafe-espresso: var(--cafe-espresso);
+  --color-cafe-accent-soft: var(--cafe-accent-soft);
+  --color-cafe-surface-soft: var(--cafe-surface-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -30,23 +34,44 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-rendering: optimizeLegibility;
 }
 
-button {
-  background-color: #000;
-  border-color: #000;
-  color: #fff;
-}
-
-button:hover:not(:disabled) {
-  background-color: #262626;
-  border-color: #262626;
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 button:focus-visible {
-  outline: 2px solid #000;
+  outline: 3px solid var(--cafe-sage);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--cafe-sage);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: #99d5ce;
+  color: #102a43;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {

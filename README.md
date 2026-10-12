@@ -36,6 +36,7 @@ printable receipt.
    - `supabase/migrations/20261013000800_fix_sales_report_date_series.sql`
    - `supabase/migrations/20261013000900_store_settings.sql`
    - `supabase/migrations/20261013001000_landing_background_video.sql`
+   - `supabase/migrations/20261013001100_combined_pwd_senior_discount.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -84,13 +85,16 @@ Checkout requires a payment method. Cash requires an amount received at least
 equal to the order total and calculates change; Card and E-wallet are recorded
 as exact-total payments but are not processed by a payment provider. A
 successful order opens a printable receipt.
-The register can apply one 10% PWD or Senior Citizen discount to an order.
+The register can apply one combined 10% PWD / Senior Citizen discount to an order.
 The discount is applied to the subtotal before the app's existing 8% tax, and
 the saved order, payment validation, and printed receipt use the discounted
-amount. This is a flat POS discount setting and does not implement statutory
-eligibility verification or tax treatment.
-All staff can open a printable receipt from each recent transaction; PWD or
-Senior Citizen discounts are tagged in the list and detailed on the receipt.
+amount. New combined discounts are recorded as PWD / Senior Citizen without
+distinguishing which eligibility type was selected; previously recorded PWD
+and Senior Citizen orders retain their original labels. This is a flat POS
+discount setting and does not implement statutory eligibility verification or
+tax treatment.
+All staff can open a printable receipt from each recent transaction; discounts
+are tagged in the list and detailed on the receipt.
 Refunds initiated from
 the register require a Manager or Admin to approve with their Supabase email
 and password; the approver is separately authenticated and the active cashier

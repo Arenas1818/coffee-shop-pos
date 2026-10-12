@@ -32,18 +32,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function localDateValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function manilaDateValue(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: "year" | "month" | "day") =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function defaultDateRange() {
-  const today = new Date();
+  const today = manilaDateValue(new Date());
   return {
-    from: localDateValue(new Date(today.getFullYear(), today.getMonth(), 1)),
-    to: localDateValue(today),
+    from: `${today.slice(0, 7)}-01`,
+    to: today,
   };
 }
 
@@ -173,6 +178,21 @@ export default function SalesReportsClient({
     void loadReport(fromDate, toDate);
   }
 
+  function applyDatePreset(preset: "today" | "last7" | "month") {
+    const to = manilaDateValue(new Date());
+    let from = to;
+    if (preset === "month") {
+      from = `${to.slice(0, 7)}-01`;
+    } else if (preset === "last7") {
+      const start = new Date(`${to}T12:00:00+08:00`);
+      start.setUTCDate(start.getUTCDate() - 6);
+      from = manilaDateValue(start);
+    }
+    setFromDate(from);
+    setToDate(to);
+    void loadReport(from, to);
+  }
+
   function downloadCsv() {
     if (!report) return;
     const rows: (string | number)[][] = [
@@ -212,21 +232,24 @@ export default function SalesReportsClient({
   }
 
   const summaryCards = [
-    { label: "Filtered revenue", value: formatCurrency(report?.revenue ?? 0) },
-    { label: "Orders", value: String(report?.orderCount ?? 0) },
+    {
+      label: "Filtered revenue",
+      value: report ? formatCurrency(report.revenue) : "—",
+    },
+    { label: "Orders", value: report ? String(report.orderCount) : "—" },
     {
       label: "Average orders per day",
-      value: report?.averageOrdersPerDay.toFixed(2) ?? "0.00",
+      value: report ? report.averageOrdersPerDay.toFixed(2) : "—",
     },
-    { label: "Items sold", value: String(report?.itemsSold ?? 0) },
+    { label: "Items sold", value: report ? String(report.itemsSold) : "—" },
   ];
 
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
-      <header className="sales-report-screen-only border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(74,52,40,0.04)]">
+      <header className="sales-report-screen-only border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(16,42,67,0.06)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cafe-espresso text-xl text-[#fffaf0]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cafe-espresso text-xl text-white">
               ☕
             </div>
             <div>
@@ -247,21 +270,41 @@ export default function SalesReportsClient({
           <ManagementSidebar role={role} />
         </div>
         <div className="min-w-0 flex-1 px-0 py-2 sm:py-4 lg:px-8 lg:py-8">
-          <section className="sales-report-screen-only mb-7 flex flex-wrap items-end justify-between gap-4 rounded-3xl bg-[#eee5d7] px-6 py-7 sm:px-8 sm:py-9">
+          <section className="sales-report-screen-only mb-7 flex flex-wrap items-end justify-between gap-4 rounded-3xl bg-gradient-to-br from-[#102a43] to-[#155e63] px-6 py-7 text-white shadow-[0_14px_32px_rgba(16,42,67,0.14)] sm:px-8 sm:py-9">
             <div>
-              <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cafe-sage-dark">
+              <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-[#b7e5de]">
                 MANAGEMENT WORKSPACE
               </p>
-              <h1 className="text-3xl font-semibold tracking-tight text-cafe-espresso sm:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 Sales Reports
               </h1>
-              <p className="mt-2 text-sm text-[#75695d]">
+              <p className="mt-2 text-sm text-[#d8e4e9]">
                 Review sales totals and payment amounts for a selected date range.
               </p>
             </div>
           </section>
 
           <section className="sales-report-screen-only mb-6 rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-[0_3px_14px_rgba(74,52,40,0.035)]">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-sm font-medium text-cafe-muted">
+                Quick range
+              </span>
+              {([
+                ["today", "Today"],
+                ["last7", "Last 7 days"],
+                ["month", "This month"],
+              ] as const).map(([preset, label]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => applyDatePreset(preset)}
+                  className="min-h-10 rounded-lg border border-cafe-border bg-[#f8f4ec] px-3 text-sm font-medium text-cafe-espresso transition hover:border-cafe-sage hover:bg-[#f3f4ed] disabled:opacity-60"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <form
               className="flex flex-wrap items-end gap-3"
               onSubmit={applyDateRange}

@@ -385,7 +385,7 @@ export default function DashboardClient({
 
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
-      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(74,52,40,0.04)]">
+      <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(16,42,67,0.06)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cafe-espresso text-xl text-[#fffaf0]">
@@ -403,7 +403,7 @@ export default function DashboardClient({
               <p className="text-sm font-medium">{email}</p>
               <p className="text-xs capitalize text-cafe-muted">{role}</p>
             </div>
-            <span className="rounded-full bg-[#eee5d7] px-3 py-1.5 text-xs font-semibold capitalize text-cafe-espresso sm:hidden">
+            <span className="rounded-full bg-cafe-surface-soft px-3 py-1.5 text-xs font-semibold capitalize text-cafe-espresso sm:hidden">
               {role}
             </span>
             <Link
@@ -419,15 +419,15 @@ export default function DashboardClient({
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 px-5 py-5 sm:px-8 lg:flex-row lg:gap-0 lg:px-0 lg:py-0">
         <ManagementSidebar role={role} />
         <div className="min-w-0 flex-1 px-0 py-2 sm:py-4 lg:px-8 lg:py-8">
-        <section className="mb-7 flex flex-wrap items-end justify-between gap-4 rounded-3xl bg-[#eee5d7] px-6 py-7 sm:px-8 sm:py-9">
+        <section className="mb-7 flex flex-wrap items-end justify-between gap-4 rounded-3xl bg-gradient-to-br from-[#102a43] to-[#155e63] px-6 py-7 text-white shadow-[0_14px_32px_rgba(16,42,67,0.14)] sm:px-8 sm:py-9">
           <div>
-            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cafe-sage-dark">
+            <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-[#b7e5de]">
               LIVE BUSINESS OVERVIEW
             </p>
-            <h1 className="text-3xl font-semibold tracking-tight text-cafe-espresso sm:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
               Your week at a glance.
             </h1>
-            <p className="mt-2 text-sm text-[#75695d]">
+            <p className="mt-2 text-sm text-[#d8e4e9]">
               Sales, inventory, and profit for the last seven days.
             </p>
           </div>
@@ -441,7 +441,7 @@ export default function DashboardClient({
               type="button"
               onClick={() => void refreshDashboard()}
               disabled={isRefreshing}
-              className="rounded-lg border border-[#d7cbbb] bg-cafe-card px-3 py-2 text-sm font-medium text-cafe-espresso transition hover:bg-[#f8f4ec] disabled:opacity-60"
+              className="rounded-lg border border-white/25 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-60"
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
@@ -474,7 +474,7 @@ export default function DashboardClient({
             >
               <div className="flex items-center justify-between">
                 <p className="text-sm text-cafe-muted">{card.label}</p>
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eee5d7] text-cafe-sage-dark">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cafe-accent-soft text-cafe-sage-dark">
                   {card.icon}
                 </span>
               </div>
@@ -661,7 +661,7 @@ export default function DashboardClient({
                     className="flex items-center justify-between gap-3 py-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eee5d7] text-sm font-semibold text-cafe-sage-dark">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cafe-accent-soft text-sm font-semibold text-cafe-sage-dark">
                         {index + 1}
                       </span>
                       <span className="truncate text-sm font-medium">

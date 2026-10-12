@@ -13,7 +13,7 @@ type RefundableOrder = {
 type RecentOrder = {
   id: string;
   subtotal: number;
-  discountType: "pwd" | "senior" | null;
+  discountType: "pwd" | "senior" | "pwd_senior" | null;
   discountAmount: number;
   tax: number;
   total: number;
@@ -88,7 +88,8 @@ function parseActivity(value: unknown): RegisterActivity {
       !Number.isFinite(total) ||
       (item.discount_type !== null &&
         item.discount_type !== "pwd" &&
-        item.discount_type !== "senior") ||
+      item.discount_type !== "senior" &&
+      item.discount_type !== "pwd_senior") ||
       (item.payment_method !== null &&
         typeof item.payment_method !== "string") ||
       (amountReceived !== null && !Number.isFinite(amountReceived))
@@ -126,7 +127,9 @@ function parseActivity(value: unknown): RegisterActivity {
       id: item.id,
       subtotal,
       discountType:
-        item.discount_type === "pwd" || item.discount_type === "senior"
+        item.discount_type === "pwd" ||
+        item.discount_type === "senior" ||
+        item.discount_type === "pwd_senior"
           ? item.discount_type
           : null,
       discountAmount,
@@ -152,6 +155,7 @@ const transactionDate = new Intl.DateTimeFormat(undefined, {
 const transactionDiscountLabels = {
   pwd: "PWD · 10% discount",
   senior: "Senior Citizen · 10% discount",
+  pwd_senior: "PWD / Senior Citizen · 10% discount",
 } as const;
 
 export default function RegisterFinancialActivity({
@@ -184,6 +188,7 @@ export default function RegisterFinancialActivity({
   }
 
   async function refreshActivity() {
+    setIsLoading(true);
     try {
       const { data, error } = await createSupabaseBrowserClient().rpc(
         "register_activity",
@@ -377,7 +382,7 @@ export default function RegisterFinancialActivity({
         aria-labelledby="register-recent-transactions-heading"
         className="rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-[0_3px_14px_rgba(74,52,40,0.035)] sm:p-6"
       >
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2
               id="register-recent-transactions-heading"
@@ -397,6 +402,11 @@ export default function RegisterFinancialActivity({
                 setIsRefundDialogOpen(true);
               }}
               disabled={isLoading || !activity?.refundableOrders.length}
+              title={
+                activity?.refundableOrders.length
+                  ? "Record a refund with manager or admin approval"
+                  : "No refundable orders are available"
+              }
               className="rounded-lg bg-cafe-sage-dark px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               Record refund
@@ -426,9 +436,14 @@ export default function RegisterFinancialActivity({
                   aria-label={`View receipt for order ${order.id.slice(0, 8)}`}
                 >
                   <div className="min-w-0 py-1">
-                    <p className="text-sm font-medium">
-                      Order #{order.id.slice(0, 8)}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">
+                        Order #{order.id.slice(0, 8)}
+                      </p>
+                      <span className="rounded-full bg-[#f3eee5] px-2.5 py-1 text-xs font-medium capitalize text-cafe-espresso">
+                        {order.paymentMethod?.replace("_", " ") ?? "Payment unrecorded"}
+                      </span>
+                    </div>
                     <p className="mt-1 truncate text-xs text-cafe-muted">
                       {order.items
                         .map(

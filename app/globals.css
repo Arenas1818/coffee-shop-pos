@@ -83,4 +83,28 @@ button:focus-visible {
   .receipt-print * {
     visibility: visible !important;
   }
+
+  .sales-report-screen-only {
+    display: none !important;
+  }
+
+  .sales-report-print-target,
+  .sales-report-print-target * {
+    visibility: visible !important;
+  }
+
+  .sales-report-print-target {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    color: #000 !important;
+  }
+
+  .sales-report-print-target article,
+  .sales-report-print-target section {
+    break-inside: avoid;
+    background: #fff !important;
+    color: #000 !important;
+  }
 }

@@ -32,6 +32,7 @@ printable receipt.
    - `supabase/migrations/20261013000400_edit_supply_details.sql`
    - `supabase/migrations/20261013000500_pwd_senior_order_discount.sql`
    - `supabase/migrations/20261013000600_register_transaction_receipts.sql`
+   - `supabase/migrations/20261013000700_sales_reports.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -64,8 +65,11 @@ printable receipt.
    [http://localhost:3000](http://localhost:3000).
 
 Managers and admins can use the management sidebar for the dashboard,
-inventory, products, customers, and employees. Every active menu product is
-automatically linked to inventory. Products without a recipe deduct finished
+sales reports, inventory, products, customers, and employees. Sales Reports
+can filter date ranges, show revenue, order count, average orders per day,
+items sold, and amount received by payment method, and export the report to
+CSV or print/save it as PDF. Report dates use Philippines time. Every active
+menu product is automatically linked to inventory. Products without a recipe deduct finished
 product stock at checkout; products with a recipe deduct each recipe supply
 atomically instead. Insufficient ingredient or product stock prevents checkout.
 Checkout requires a payment method. Cash requires an amount received at least

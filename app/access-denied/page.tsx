@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function AccessDeniedPage() {
-  const router = useRouter();
   const [errorMessage, setErrorMessage] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -19,8 +17,9 @@ export default function AccessDeniedPage() {
       setIsSigningOut(false);
       return;
     }
-    router.replace("/login");
-    router.refresh();
+    window.location.replace(
+      new URL("/login", window.location.href).toString(),
+    );
   }
 
   return (

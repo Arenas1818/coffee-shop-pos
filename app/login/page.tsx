@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 function describeError(error: unknown): string {
@@ -17,7 +16,6 @@ function describeError(error: unknown): string {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -63,8 +61,7 @@ export default function LoginPage() {
         password,
       });
       if (error) throw error;
-      router.replace("/");
-      router.refresh();
+      window.location.replace(new URL("/", window.location.href).toString());
     } catch (error) {
       setErrorMessage(describeError(error));
       setIsSigningIn(false);

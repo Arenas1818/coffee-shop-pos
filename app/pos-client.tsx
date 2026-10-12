@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store-settings";
 import RegisterFinancialActivity from "./register-financial-activity";
@@ -143,7 +142,6 @@ export default function PosClient({
   email: string;
   role: "staff" | "manager" | "admin";
 }) {
-  const router = useRouter();
   const {
     settings,
     formatCurrency,
@@ -349,8 +347,9 @@ export default function PosClient({
       setOrderError(`Could not sign out: ${describeError(error)}`);
       return;
     }
-    router.replace("/login");
-    router.refresh();
+    window.location.replace(
+      new URL("/login", window.location.href).toString(),
+    );
   }
 
   return (

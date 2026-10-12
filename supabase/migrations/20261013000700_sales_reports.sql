@@ -100,7 +100,7 @@ begin
             days.day::timestamp at time zone 'Asia/Manila'
           )
           and order_row.created_at < (
-            (days.day + 1)::timestamp at time zone 'Asia/Manila'
+            (days.day + interval '1 day') at time zone 'Asia/Manila'
           )
       ) as daily on true
     ), '[]'::jsonb)

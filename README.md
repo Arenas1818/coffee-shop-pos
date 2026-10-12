@@ -33,6 +33,7 @@ printable receipt.
    - `supabase/migrations/20261013000500_pwd_senior_order_discount.sql`
    - `supabase/migrations/20261013000600_register_transaction_receipts.sql`
    - `supabase/migrations/20261013000700_sales_reports.sql`
+   - `supabase/migrations/20261013000800_fix_sales_report_date_series.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value

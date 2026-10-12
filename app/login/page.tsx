@@ -96,7 +96,9 @@ export default function LoginPage() {
           </div>
           <div>
             <p className="font-semibold tracking-tight">KAPE NA NAMAN</p>
-            <p className="text-xs text-cafe-muted">Staff point of sale</p>
+            <p className="text-xs text-cafe-muted">
+              System by: Apatnatwo-gether
+            </p>
           </div>
         </div>
         <h1         className="text-2xl font-semibold tracking-tight text-cafe-espresso">Staff sign in</h1>

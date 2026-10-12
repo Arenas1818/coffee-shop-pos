@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f5f0e7;
+  --foreground: #342a22;
+  --cafe-cream: #f5f0e7;
+  --cafe-card: #fffdf9;
+  --cafe-border: #e8dfd2;
+  --cafe-muted: #82776b;
+  --cafe-sage: #687b61;
+  --cafe-sage-dark: #506348;
+  --cafe-espresso: #4a3428;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-cafe-cream: var(--cafe-cream);
+  --color-cafe-card: var(--cafe-card);
+  --color-cafe-border: var(--cafe-border);
+  --color-cafe-muted: var(--cafe-muted);
+  --color-cafe-sage: var(--cafe-sage);
+  --color-cafe-sage-dark: var(--cafe-sage-dark);
+  --color-cafe-espresso: var(--cafe-espresso);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button {
+  background-color: #000;
+  border-color: #000;
+  color: #fff;
+}
+
+button:hover:not(:disabled) {
+  background-color: #262626;
+  border-color: #262626;
+}
+
+button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}

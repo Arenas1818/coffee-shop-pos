@@ -151,11 +151,19 @@ const transactionDate = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
-const transactionDiscountLabels = {
-  pwd: "PWD · 10% discount",
-  senior: "Senior Citizen · 10% discount",
-  pwd_senior: "PWD / Senior Citizen · 10% discount",
-} as const;
+function transactionDiscountLabel(order: RecentOrder) {
+  if (!order.discountType) return "";
+  const percentage =
+    order.subtotal > 0
+      ? Math.round((order.discountAmount / order.subtotal) * 100)
+      : 0;
+  const typeLabel = {
+    pwd: "PWD",
+    senior: "Senior Citizen",
+    pwd_senior: "PWD / Senior Citizen",
+  }[order.discountType];
+  return `${typeLabel} · ${percentage}% discount`;
+}
 
 export default function RegisterFinancialActivity({
   role,
@@ -463,7 +471,7 @@ export default function RegisterFinancialActivity({
                     </p>
                     {order.discountType && (
                       <span className="mt-2 inline-flex rounded-full bg-[#edf1e8] px-2.5 py-1 text-xs font-semibold text-cafe-sage-dark">
-                        {transactionDiscountLabels[order.discountType]}
+                        {transactionDiscountLabel(order)}
                       </span>
                     )}
                   </div>
@@ -539,13 +547,31 @@ export default function RegisterFinancialActivity({
             </div>
             <div className="receipt-content">
               <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
-                <h3 className="text-lg font-bold tracking-wide">
-                  {settings.storeName}
-                </h3>
+                {settings.visibleStoreFields.includes("store_name") && (
+                  <h3 className="text-lg font-bold tracking-wide">
+                    {settings.storeName}
+                  </h3>
+                )}
                 <p className="mt-1 text-sm">Sales Invoice</p>
-                {settings.address && <p className="mt-1 text-xs">{settings.address}</p>}
-                {settings.phone && <p className="mt-1 text-xs">{settings.phone}</p>}
-                {settings.vatTin && <p className="mt-1 text-xs">VAT REG TIN: {settings.vatTin}</p>}
+                {settings.visibleStoreFields.includes("address") &&
+                  settings.address && (
+                    <p className="mt-1 text-xs">{settings.address}</p>
+                  )}
+                {settings.visibleStoreFields.includes("phone") &&
+                  settings.phone && (
+                    <p className="mt-1 text-xs">{settings.phone}</p>
+                  )}
+                {settings.visibleStoreFields.includes("vat_tin") &&
+                  settings.vatTin && (
+                    <p className="mt-1 text-xs">
+                      VAT REG TIN: {settings.vatTin}
+                    </p>
+                  )}
+                {settings.additionalDetails.map((detail) => (
+                  <p key={`${detail.label}:${detail.value}`} className="mt-1 text-xs">
+                    {detail.label}: {detail.value}
+                  </p>
+                ))}
                 <p className="mt-2 break-all text-xs">
                   Order: {selectedOrder.id}
                 </p>
@@ -579,7 +605,7 @@ export default function RegisterFinancialActivity({
                 {selectedOrder.discountType && (
                   <div className="flex justify-between">
                     <dt>
-                      {transactionDiscountLabels[selectedOrder.discountType]}
+                      {transactionDiscountLabel(selectedOrder)}
                     </dt>
                     <dd>−{formatCurrency(selectedOrder.discountAmount)}</dd>
                   </div>

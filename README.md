@@ -42,6 +42,8 @@ printable receipt.
    - `supabase/migrations/20261013001200_staff_pin_attendance.sql`
    - `supabase/migrations/20261013001300_employee_full_name.sql`
    - `supabase/migrations/20261013001400_register_tax_tin_refund_pin_availability.sql`
+   - `supabase/migrations/20261014000100_store_info_details_and_20_percent_discount.sql`
+   - `supabase/migrations/20261014000200_removable_store_receipt_fields.sql`
 5. In the Supabase dashboard, create the initial staff user under
    **Authentication → Users**, then add their UUID to `public.staff_members`
    in the SQL Editor. Subsequent employees can be created from the Employees
@@ -72,9 +74,12 @@ remains signed in. The server-side `SUPABASE_SERVICE_ROLE_KEY` is required for
 this account-creation flow and must also be configured as a secret in the
 deployment environment. Generated addresses do not receive email, so do not
 use these accounts for normal email/password login or password recovery.
-Settings controls store name, address, phone, VAT REG TIN, receipt footer,
-currency symbol, global low-stock threshold fallback, and the optional landing
-video upload. VAT REG TIN is printed on Sales Invoices when provided. The
+Settings controls which standard store details appear on Sales Invoices;
+Phone is hidden by default, and fields can be removed and added back without
+deleting their saved values. Add up to 10 custom label/value receipt details,
+set the receipt footer, currency symbol, global low-stock threshold fallback,
+and optional landing video. Visible store details are printed on Sales
+Invoices when provided. The
 uploaded MP4 or WebM video is stored in Supabase Storage, limited to 50 MB, and
 plays muted behind the sign-in page. The register does not add tax. Migration
 `20261013001400` recalculates all existing orders without tax while preserving
@@ -90,12 +95,12 @@ Checkout requires a payment method. Cash requires an amount received at least
 equal to the order total and calculates change; Card and E-wallet are recorded
 as exact-total payments but are not processed by a payment provider. A
 successful order opens a printable receipt.
-The register can apply one combined 10% PWD / Senior Citizen discount to an order.
+The register can apply one combined 20% PWD / Senior Citizen discount to new orders.
 The discount is applied to the subtotal, and the saved order, payment
 validation, and printed Sales Invoice use the discounted amount without tax.
 New combined discounts are recorded as PWD / Senior Citizen without
-distinguishing which eligibility type was selected; previously recorded PWD
-and Senior Citizen orders retain their original labels. This is a flat POS
+distinguishing which eligibility type was selected; previously recorded discounted
+orders retain their original totals and amounts. This is a flat POS
 discount setting and does not implement statutory eligibility verification or
 tax treatment.
 All staff can open a printable receipt from each recent transaction; discounts

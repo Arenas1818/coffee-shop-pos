@@ -12,11 +12,20 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isStaleAuthSessionError } from "@/lib/auth";
 
+export type StoreInfoDetail = { label: string; value: string };
+export type StoreInfoField =
+  | "store_name"
+  | "address"
+  | "phone"
+  | "vat_tin";
+
 export type StoreSettings = {
   storeName: string;
   address: string;
   phone: string;
   vatTin: string;
+  visibleStoreFields: StoreInfoField[];
+  additionalDetails: StoreInfoDetail[];
   receiptFooter: string;
   currencySymbol: string;
   globalLowStockThreshold: number;
@@ -29,6 +38,8 @@ const defaultSettings: StoreSettings = {
   address: "",
   phone: "",
   vatTin: "",
+  visibleStoreFields: ["store_name", "address", "vat_tin"],
+  additionalDetails: [],
   receiptFooter: "Thank you for your order!",
   currencySymbol: "₱",
   globalLowStockThreshold: 10,
@@ -60,6 +71,8 @@ function parseSettings(value: unknown): StoreSettings {
     typeof data.address !== "string" ||
     typeof data.phone !== "string" ||
     typeof data.vat_tin !== "string" ||
+    !Array.isArray(data.visible_store_fields) ||
+    !Array.isArray(data.additional_details) ||
     typeof data.receipt_footer !== "string" ||
     typeof data.currency_symbol !== "string" ||
     (data.background_video_path !== null &&
@@ -69,11 +82,45 @@ function parseSettings(value: unknown): StoreSettings {
   ) {
     throw new Error("Store settings returned invalid values.");
   }
+  const validStoreFields: StoreInfoField[] = [
+    "store_name",
+    "address",
+    "phone",
+    "vat_tin",
+  ];
+  if (
+    !data.visible_store_fields.every(
+      (field: unknown): field is StoreInfoField =>
+        typeof field === "string" &&
+        validStoreFields.includes(field as StoreInfoField),
+    ) ||
+    new Set(data.visible_store_fields).size !== data.visible_store_fields.length
+  ) {
+    throw new Error("Store settings returned invalid visible receipt fields.");
+  }
+  const additionalDetails: StoreInfoDetail[] = data.additional_details.map(
+    (detail: unknown) => {
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        Array.isArray(detail) ||
+        !("label" in detail) ||
+        typeof detail.label !== "string" ||
+        !("value" in detail) ||
+        typeof detail.value !== "string"
+      ) {
+        throw new Error("Store settings returned invalid receipt details.");
+      }
+      return { label: detail.label, value: detail.value };
+    },
+  );
   return {
     storeName: data.store_name,
     address: data.address,
     phone: data.phone,
     vatTin: data.vat_tin,
+    visibleStoreFields: data.visible_store_fields,
+    additionalDetails,
     receiptFooter: data.receipt_footer,
     currencySymbol: data.currency_symbol,
     globalLowStockThreshold,

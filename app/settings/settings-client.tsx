@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import ManagementSidebar from "../management-sidebar";
-import { useStoreSettings, type StoreSettings } from "@/lib/store-settings";
+import {
+  useStoreSettings,
+  type StoreInfoField,
+  type StoreSettings,
+} from "@/lib/store-settings";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function SettingsClient({
@@ -12,9 +16,18 @@ export default function SettingsClient({
   role: "manager" | "admin";
   email: string;
 }) {
+  const storeFieldOptions: { key: StoreInfoField; label: string }[] = [
+    { key: "store_name", label: "Store name" },
+    { key: "address", label: "Address" },
+    { key: "phone", label: "Phone" },
+    { key: "vat_tin", label: "VAT REG TIN" },
+  ];
   const { settings, error: settingsError, refreshSettings, setSettings } =
     useStoreSettings();
   const [form, setForm] = useState<StoreSettings>(settings);
+  const [storeFieldToAdd, setStoreFieldToAdd] = useState<StoreInfoField | "">(
+    "",
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
@@ -54,8 +67,46 @@ export default function SettingsClient({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function addStoreField() {
+    if (
+      !storeFieldToAdd ||
+      form.visibleStoreFields.includes(storeFieldToAdd)
+    ) {
+      return;
+    }
+    update("visibleStoreFields", [
+      ...form.visibleStoreFields,
+      storeFieldToAdd,
+    ]);
+    setStoreFieldToAdd("");
+  }
+
+  function removeStoreField(field: StoreInfoField) {
+    update(
+      "visibleStoreFields",
+      form.visibleStoreFields.filter((visibleField) => visibleField !== field),
+    );
+  }
+
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const filledDetails = form.additionalDetails.filter(
+      (detail) => detail.label.trim() || detail.value.trim(),
+    );
+    if (
+      filledDetails.some(
+        (detail) =>
+          !detail.label.trim() ||
+          !detail.value.trim() ||
+          detail.label.trim().length > 40 ||
+          detail.value.trim().length > 120,
+      )
+    ) {
+      setErrorMessage(
+        "Complete each additional store detail with a label and value (up to 40 and 120 characters).",
+      );
+      return;
+    }
     setIsSaving(true);
     setErrorMessage("");
     setNotice("");
@@ -67,16 +118,29 @@ export default function SettingsClient({
           p_address: form.address,
           p_phone: form.phone,
           p_vat_tin: form.vatTin,
+          p_additional_details: filledDetails.map((detail) => ({
+            label: detail.label.trim(),
+            value: detail.value.trim(),
+          })),
           p_receipt_footer: form.receiptFooter,
           p_currency_symbol: form.currencySymbol,
           p_global_low_stock_threshold: form.globalLowStockThreshold,
           p_background_video_path: form.backgroundVideoPath,
           p_background_video_enabled: form.backgroundVideoEnabled,
+          p_visible_store_fields: form.visibleStoreFields,
         },
       );
       if (error) throw error;
+      const savedSettings = {
+        ...form,
+        additionalDetails: filledDetails.map((detail) => ({
+          label: detail.label.trim(),
+          value: detail.value.trim(),
+        })),
+      };
       await refreshSettings();
-      setSettings(form);
+      setSettings(savedSettings);
+      setForm(savedSettings);
       setNotice("Store settings saved.");
     } catch (error) {
       setErrorMessage(
@@ -219,9 +283,12 @@ export default function SettingsClient({
               {errorMessage || settingsError}
               {settingsError && (
                 <p className="mt-1">
-                  Apply migrations 20261013000900_store_settings.sql and
-                  20261013001000_landing_background_video.sql in Supabase, in
-                  order.
+                  Apply migrations 20261013000900_store_settings.sql,
+                  20261013001000_landing_background_video.sql,
+                  20261013001400_register_tax_tin_refund_pin_availability.sql,
+                  20261014000100_store_info_details_and_20_percent_discount.sql,
+                  and 20261014000200_removable_store_receipt_fields.sql in
+                  Supabase, in order.
                 </p>
               )}
             </div>
@@ -244,48 +311,190 @@ export default function SettingsClient({
                 Store information
               </h2>
               <p className="mb-5 text-sm text-cafe-muted">
-                These details appear on staff screens and customer receipts.
+                Choose which store details appear on Sales Invoices. Removing a
+                field hides it without deleting its saved value.
               </p>
               <div className="space-y-4">
-                <label className={labelClass}>
-                  Store name
-                  <input
-                    required
-                    maxLength={100}
-                    value={form.storeName}
-                    onChange={(event) => update("storeName", event.target.value)}
-                    className={fieldClass}
-                  />
-                </label>
-                <label className={labelClass}>
-                  Address
-                  <input
-                    maxLength={250}
-                    value={form.address}
-                    onChange={(event) => update("address", event.target.value)}
-                    className={fieldClass}
-                  />
-                </label>
-                <label className={labelClass}>
-                  Phone
-                  <input
-                    type="tel"
-                    maxLength={32}
-                    value={form.phone}
-                    onChange={(event) => update("phone", event.target.value)}
-                    className={fieldClass}
-                  />
-                </label>
-                <label className={labelClass}>
-                  VAT REG TIN
-                  <input
-                    maxLength={80}
-                    value={form.vatTin}
-                    onChange={(event) => update("vatTin", event.target.value)}
-                    className={fieldClass}
-                    placeholder="VAT registration TIN"
-                  />
-                </label>
+                {form.visibleStoreFields.map((field) => {
+                  const label = storeFieldOptions.find(
+                    (option) => option.key === field,
+                  )?.label;
+                  if (!label) return null;
+                  return (
+                    <div
+                      key={field}
+                      className="flex items-end gap-2"
+                    >
+                      <label className={`${labelClass} min-w-0 flex-1`}>
+                        {label}
+                        {field === "store_name" && (
+                          <input
+                            required
+                            maxLength={100}
+                            value={form.storeName}
+                            onChange={(event) =>
+                              update("storeName", event.target.value)
+                            }
+                            className={fieldClass}
+                          />
+                        )}
+                        {field === "address" && (
+                          <input
+                            maxLength={250}
+                            value={form.address}
+                            onChange={(event) =>
+                              update("address", event.target.value)
+                            }
+                            className={fieldClass}
+                          />
+                        )}
+                        {field === "phone" && (
+                          <input
+                            type="tel"
+                            maxLength={32}
+                            value={form.phone}
+                            onChange={(event) =>
+                              update("phone", event.target.value)
+                            }
+                            className={fieldClass}
+                          />
+                        )}
+                        {field === "vat_tin" && (
+                          <input
+                            maxLength={80}
+                            value={form.vatTin}
+                            onChange={(event) =>
+                              update("vatTin", event.target.value)
+                            }
+                            className={fieldClass}
+                            placeholder="VAT registration TIN"
+                          />
+                        )}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeStoreField(field)}
+                        className="mb-0.5 h-11 shrink-0 rounded-lg border border-red-200 px-3 text-sm font-medium text-red-700 transition hover:bg-red-50"
+                        aria-label={`Remove ${label} from Sales Invoices`}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    aria-label="Store detail field to add"
+                    value={storeFieldToAdd}
+                    onChange={(event) =>
+                      setStoreFieldToAdd(
+                        event.target.value as StoreInfoField | "",
+                      )
+                    }
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-cafe-border bg-white px-3 text-sm"
+                  >
+                    <option value="">Add a store detail field</option>
+                    {storeFieldOptions
+                      .filter(
+                        (option) =>
+                          !form.visibleStoreFields.includes(option.key),
+                      )
+                      .map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!storeFieldToAdd}
+                    onClick={addStoreField}
+                    className="h-10 rounded-lg border border-cafe-border px-3 text-sm font-semibold text-cafe-espresso transition hover:bg-cafe-surface-soft disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Add detail
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className={labelClass}>Additional receipt details</h3>
+                    <button
+                      type="button"
+                      disabled={form.additionalDetails.length >= 10}
+                      onClick={() =>
+                        update("additionalDetails", [
+                          ...form.additionalDetails,
+                          { label: "", value: "" },
+                        ])
+                      }
+                      className="rounded-lg border border-cafe-border px-3 py-2 text-xs font-semibold text-cafe-espresso transition hover:bg-cafe-surface-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Add field
+                    </button>
+                  </div>
+                  {form.additionalDetails.length === 0 ? (
+                    <p className="text-xs text-cafe-muted">
+                      Add optional labeled details to print below your store information.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {form.additionalDetails.map((detail, index) => (
+                        <div
+                          key={index}
+                          className="grid gap-2 rounded-xl border border-cafe-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"
+                        >
+                          <label className={labelClass}>
+                            Label
+                            <input
+                              maxLength={40}
+                              value={detail.label}
+                              onChange={(event) => {
+                                const nextDetails = [...form.additionalDetails];
+                                nextDetails[index] = {
+                                  ...detail,
+                                  label: event.target.value,
+                                };
+                                update("additionalDetails", nextDetails);
+                              }}
+                              className={fieldClass}
+                              placeholder="e.g. Permit No."
+                            />
+                          </label>
+                          <label className={labelClass}>
+                            Value
+                            <input
+                              maxLength={120}
+                              value={detail.value}
+                              onChange={(event) => {
+                                const nextDetails = [...form.additionalDetails];
+                                nextDetails[index] = {
+                                  ...detail,
+                                  value: event.target.value,
+                                };
+                                update("additionalDetails", nextDetails);
+                              }}
+                              className={fieldClass}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${detail.label || "additional"} store detail`}
+                            onClick={() =>
+                              update(
+                                "additionalDetails",
+                                form.additionalDetails.filter(
+                                  (_, detailIndex) => detailIndex !== index,
+                                ),
+                              )
+                            }
+                            className="mt-1.5 h-11 self-end rounded-lg border border-red-200 px-3 text-sm font-medium text-red-700 transition hover:bg-red-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <label className={labelClass}>
                   Receipt footer message
                   <textarea

@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import { useStoreSettings } from "@/lib/store-settings";
+import {
+  useStoreSettings,
+  type StoreInfoDetail,
+  type StoreInfoField,
+} from "@/lib/store-settings";
 import RegisterFinancialActivity from "./register-financial-activity";
 
 const categories = ["All", "Coffee", "Non-Coffee", "Tea", "Bakery"] as const;
@@ -65,6 +69,8 @@ type Receipt = {
   address: string;
   phone: string;
   vatTin: string;
+  visibleStoreFields: StoreInfoField[];
+  additionalDetails: StoreInfoDetail[];
   receiptFooter: string;
 };
 
@@ -261,7 +267,7 @@ export default function PosClient({
   const discountAmount =
     discountType === null
       ? 0
-      : Math.round((subtotal * 0.1 + Number.EPSILON) * 100) / 100;
+      : Math.round((subtotal * 0.2 + Number.EPSILON) * 100) / 100;
   const discountedSubtotal = subtotal - discountAmount;
   const total = discountedSubtotal;
   const cashAmountReceived = Number(amountReceived);
@@ -376,6 +382,8 @@ export default function PosClient({
         address: settings.address,
         phone: settings.phone,
         vatTin: settings.vatTin,
+        visibleStoreFields: settings.visibleStoreFields,
+        additionalDetails: settings.additionalDetails,
         receiptFooter: settings.receiptFooter,
       });
       setCart([]);
@@ -747,11 +755,11 @@ export default function PosClient({
                   : "border-cafe-border bg-white text-cafe-espresso"
               }`}
             >
-              PWD / Senior Citizen · 10%
+              PWD / Senior Citizen · 20%
             </button>
             {discountType && (
               <p className="mt-2 text-xs text-cafe-muted">
-                10% discount: {formatCurrency(discountAmount)}
+                20% discount: {formatCurrency(discountAmount)}
               </p>
             )}
           </div>
@@ -763,7 +771,7 @@ export default function PosClient({
             </div>
             {discountType && (
               <div className="flex justify-between text-cafe-sage-dark">
-                <span>{discountLabel} discount (10%)</span>
+                <span>{discountLabel} discount (20%)</span>
                 <span>−{formatCurrency(discountAmount)}</span>
               </div>
             )}
@@ -911,13 +919,31 @@ export default function PosClient({
             </div>
             <div className="receipt-content">
               <header className="border-b border-dashed border-[#bdb6aa] pb-4 text-center">
-                <h3 className="text-lg font-bold tracking-wide">
-                  {receipt.storeName}
-                </h3>
+                {receipt.visibleStoreFields.includes("store_name") && (
+                  <h3 className="text-lg font-bold tracking-wide">
+                    {receipt.storeName}
+                  </h3>
+                )}
                 <p className="mt-1 text-sm">Sales Invoice</p>
-                {receipt.address && <p className="mt-1 text-xs">{receipt.address}</p>}
-                {receipt.phone && <p className="mt-1 text-xs">{receipt.phone}</p>}
-                {receipt.vatTin && <p className="mt-1 text-xs">VAT REG TIN: {receipt.vatTin}</p>}
+                {receipt.visibleStoreFields.includes("address") &&
+                  receipt.address && (
+                    <p className="mt-1 text-xs">{receipt.address}</p>
+                  )}
+                {receipt.visibleStoreFields.includes("phone") &&
+                  receipt.phone && (
+                    <p className="mt-1 text-xs">{receipt.phone}</p>
+                  )}
+                {receipt.visibleStoreFields.includes("vat_tin") &&
+                  receipt.vatTin && (
+                    <p className="mt-1 text-xs">
+                      VAT REG TIN: {receipt.vatTin}
+                    </p>
+                  )}
+                {receipt.additionalDetails.map((detail) => (
+                  <p key={`${detail.label}:${detail.value}`} className="mt-1 text-xs">
+                    {detail.label}: {detail.value}
+                  </p>
+                ))}
                 <p className="mt-2 break-all text-xs">
                   Order: {receipt.orderId}
                 </p>
@@ -953,7 +979,7 @@ export default function PosClient({
                 </div>
                 {receipt.discountType && (
                   <div className="flex justify-between">
-                    <dt>{discountLabel} discount (10%)</dt>
+                    <dt>{discountLabel} discount (20%)</dt>
                     <dd>−{formatCurrency(receipt.discountAmount)}</dd>
                   </div>
                 )}

@@ -34,7 +34,7 @@ export default function EmployeesClient({
   currentUserId: string;
 }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [newRole, setNewRole] = useState<StaffRole>("staff");
   const [roleEdits, setRoleEdits] = useState<Record<string, StaffRole>>({});
   const [pinEdits, setPinEdits] = useState<Record<string, string>>({});
@@ -78,8 +78,8 @@ export default function EmployeesClient({
 
   async function saveEmployee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (fullName.trim().length < 2) {
-      setErrorMessage("Enter the employee's full name.");
+    if (username.trim().length < 2) {
+      setErrorMessage("Enter the employee's username.");
       return;
     }
     setIsSaving(true);
@@ -89,7 +89,7 @@ export default function EmployeesClient({
       const response = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, role: newRole }),
+        body: JSON.stringify({ username, role: newRole }),
       });
       const result: unknown = await response.json();
       if (
@@ -109,7 +109,7 @@ export default function EmployeesClient({
       }
       const generatedEmail = result.email;
       await loadEmployees();
-      setFullName("");
+      setUsername("");
       setNewRole("staff");
       setNotice(`Employee added as ${generatedEmail}. Assign their attendance PIN below.`);
     } catch (error) {
@@ -208,12 +208,12 @@ export default function EmployeesClient({
           <section className="mb-7 rounded-2xl border border-cafe-border bg-cafe-card p-5 sm:p-7">
             <h2 className="text-lg font-semibold text-cafe-espresso">Add employee</h2>
             <p className="mt-1 text-sm text-cafe-muted">
-              Enter their full name. A unique <span className="font-medium">@kpnnmn.com</span> Auth account is created automatically; its random password is not shared because attendance uses a separate PIN.
+              Enter a username. A unique <span className="font-medium">@kpnnmn.com</span> Auth account is created automatically; its random password is not shared because attendance uses a separate PIN.
             </p>
             <form className="mt-5 grid gap-4 sm:grid-cols-[minmax(220px,1fr)_180px_auto]" onSubmit={saveEmployee}>
               <div>
-                <label htmlFor="employee-full-name" className="mb-1.5 block text-sm font-medium">Full name</label>
-                <input id="employee-full-name" required minLength={2} maxLength={100} autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Employee full name" className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm" />
+                <label htmlFor="employee-username" className="mb-1.5 block text-sm font-medium">Username</label>
+                <input id="employee-username" required minLength={2} maxLength={100} autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Employee username" className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm" />
               </div>
               <div>
                 <label htmlFor="employee-role" className="mb-1.5 block text-sm font-medium">Role</label>

@@ -66,8 +66,8 @@ export default function SettingsClient({
           p_store_name: form.storeName,
           p_address: form.address,
           p_phone: form.phone,
+          p_vat_tin: form.vatTin,
           p_receipt_footer: form.receiptFooter,
-          p_tax_rate: form.taxRate,
           p_currency_symbol: form.currencySymbol,
           p_global_low_stock_threshold: form.globalLowStockThreshold,
           p_background_video_path: form.backgroundVideoPath,
@@ -277,6 +277,16 @@ export default function SettingsClient({
                   />
                 </label>
                 <label className={labelClass}>
+                  VAT REG TIN
+                  <input
+                    maxLength={80}
+                    value={form.vatTin}
+                    onChange={(event) => update("vatTin", event.target.value)}
+                    className={fieldClass}
+                    placeholder="VAT registration TIN"
+                  />
+                </label>
+                <label className={labelClass}>
                   Receipt footer message
                   <textarea
                     maxLength={200}
@@ -296,27 +306,9 @@ export default function SettingsClient({
                 Checkout &amp; inventory
               </h2>
               <p className="mb-5 text-sm text-cafe-muted">
-                Defaults used for new orders and low-stock alerts.
+                Currency and low-stock defaults used by the register.
               </p>
               <div className="space-y-4">
-                <label className={labelClass}>
-                  Tax rate (%)
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={form.taxRate}
-                    onChange={(event) =>
-                      update("taxRate", Number(event.target.value))
-                    }
-                    className={fieldClass}
-                  />
-                  <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-cafe-muted">
-                    Applies to new orders, after any order discount.
-                  </span>
-                </label>
                 <label className={labelClass}>
                   Currency symbol
                   <input

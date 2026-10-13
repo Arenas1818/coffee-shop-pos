@@ -10,13 +10,14 @@ import {
   type ReactNode,
 } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { isStaleAuthSessionError } from "@/lib/auth";
 
 export type StoreSettings = {
   storeName: string;
   address: string;
   phone: string;
+  vatTin: string;
   receiptFooter: string;
-  taxRate: number;
   currencySymbol: string;
   globalLowStockThreshold: number;
   backgroundVideoPath: string | null;
@@ -27,8 +28,8 @@ const defaultSettings: StoreSettings = {
   storeName: "KAPE NA NAMAN",
   address: "",
   phone: "",
+  vatTin: "",
   receiptFooter: "Thank you for your order!",
-  taxRate: 8,
   currencySymbol: "₱",
   globalLowStockThreshold: 10,
   backgroundVideoPath: null,
@@ -53,18 +54,17 @@ function parseSettings(value: unknown): StoreSettings {
     throw new Error("Store settings returned an invalid response.");
   }
   const data = value as Record<string, unknown>;
-  const taxRate = Number(data.tax_rate);
   const globalLowStockThreshold = Number(data.global_low_stock_threshold);
   if (
     typeof data.store_name !== "string" ||
     typeof data.address !== "string" ||
     typeof data.phone !== "string" ||
+    typeof data.vat_tin !== "string" ||
     typeof data.receipt_footer !== "string" ||
     typeof data.currency_symbol !== "string" ||
     (data.background_video_path !== null &&
       typeof data.background_video_path !== "string") ||
     typeof data.background_video_enabled !== "boolean" ||
-    !Number.isFinite(taxRate) ||
     !Number.isFinite(globalLowStockThreshold)
   ) {
     throw new Error("Store settings returned invalid values.");
@@ -73,8 +73,8 @@ function parseSettings(value: unknown): StoreSettings {
     storeName: data.store_name,
     address: data.address,
     phone: data.phone,
+    vatTin: data.vat_tin,
     receiptFooter: data.receipt_footer,
-    taxRate,
     currencySymbol: data.currency_symbol,
     globalLowStockThreshold,
     backgroundVideoPath:
@@ -94,7 +94,14 @@ export function StoreSettingsProvider({ children }: { children: ReactNode }) {
     try {
       const supabase = createSupabaseBrowserClient();
       const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
+      if (userError) {
+        if (isStaleAuthSessionError(userError)) {
+          setSettings(defaultSettings);
+          setError("");
+          return;
+        }
+        throw userError;
+      }
       if (!userData.user) {
         setSettings(defaultSettings);
         setError("");

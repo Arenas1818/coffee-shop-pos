@@ -249,6 +249,7 @@ export default function DashboardClient({
   const [refundOrderId, setRefundOrderId] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
+  const [refundPin, setRefundPin] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -281,25 +282,39 @@ export default function DashboardClient({
   async function recordRefund(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amount = Number(refundAmount);
-    if (!refundOrderId || !Number.isFinite(amount) || amount <= 0 || !refundReason.trim()) {
-      setErrorMessage("Choose an order and enter a valid refund amount and reason.");
+    if (!refundOrderId || !Number.isFinite(amount) || amount <= 0 || !refundReason.trim() || !/^[0-9]{6}$/.test(refundPin)) {
+      setErrorMessage("Choose an order, enter the refund details, and enter a Manager/Admin six-digit PIN.");
       return;
     }
     setIsSavingAction(true);
     setErrorMessage("");
     setActionMessage("");
     try {
-      const { error } = await createSupabaseBrowserClient().rpc(
-        "record_order_refund",
+      const { data, error } = await createSupabaseBrowserClient().rpc(
+        "approve_order_refund_with_pin",
         {
           p_order_id: refundOrderId,
           p_amount: Number(amount.toFixed(2)),
           p_reason: refundReason.trim(),
+          p_manager_pin: refundPin,
         },
       );
       if (error) throw error;
+      if (!isRecord(data) || typeof data.status !== "string") {
+        throw new Error("The refund service returned an invalid approval response.");
+      }
+      if (data.status === "invalid_pin") {
+        throw new Error(`That PIN is not assigned to a Manager or Admin. ${String(data.attempts_remaining ?? 0)} attempts remain.`);
+      }
+      if (data.status === "locked") {
+        throw new Error("PIN entry is locked for 10 minutes after repeated incorrect attempts.");
+      }
+      if (data.status !== "refunded") {
+        throw new Error("The refund service returned an unknown approval status.");
+      }
       setRefundAmount("");
       setRefundReason("");
+      setRefundPin("");
       setActionMessage("Refund recorded.");
       await refreshDashboard();
     } catch (error) {
@@ -309,6 +324,7 @@ export default function DashboardClient({
           : String(error),
       );
     } finally {
+      setRefundPin("");
       setIsSavingAction(false);
     }
   }
@@ -493,7 +509,7 @@ export default function DashboardClient({
 
         {metrics && metrics.uncostedItems > 0 && (
           <p role="status" className="mb-5 rounded-xl border border-[#e7c994] bg-[#fff5df] px-4 py-3 text-sm text-[#76501d]">
-            Add supply costs and product recipes in Inventory (or product costs in Products for products without recipes).
+            Add supplies and update stock in Inventory; manage recipes and product costs in Products.
             {" "}{metrics.uncostedItems} sold {metrics.uncostedItems === 1 ? "item has" : "items have"} no saved cost; older orders may also lack cost snapshots.
           </p>
         )}
@@ -567,7 +583,7 @@ export default function DashboardClient({
               <p className="py-8 text-center text-sm text-cafe-muted">Profit data is unavailable.</p>
             )}
             <p className="mt-4 text-xs text-cafe-muted">
-              Revenue includes order totals and tax. Item costs are captured when each order is placed.
+              Revenue uses the saved order totals. Item costs are captured when each order is placed.
             </p>
           </section>
         </div>
@@ -621,6 +637,8 @@ export default function DashboardClient({
                 <input id="refund-amount" required type="number" min="0.01" step="0.01" max={metrics?.refundableOrders.find((order) => order.id === refundOrderId)?.remaining} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} placeholder="Refund amount (PHP)" className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm" />
                 <label className="sr-only" htmlFor="refund-reason">Refund reason</label>
                 <input id="refund-reason" required maxLength={200} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Reason" className="h-10 w-full rounded-lg border border-cafe-border px-3 text-sm" />
+                <label className="sr-only" htmlFor="refund-pin">Manager/Admin PIN</label>
+                <input id="refund-pin" required type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={refundPin} onChange={(event) => setRefundPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Manager/Admin 6-digit PIN" className="h-10 w-full rounded-lg border border-cafe-border px-3 text-center text-sm tracking-[0.3em]" />
                 <button type="submit" disabled={isSavingAction || !metrics?.refundableOrders.length} className="h-10 rounded-lg bg-cafe-sage-dark px-4 text-sm font-medium text-white disabled:opacity-50">{isSavingAction ? "Saving..." : "Record refund"}</button>
               </form>
               <form className="space-y-3" onSubmit={(event) => void recordExpense(event)}>

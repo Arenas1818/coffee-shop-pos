@@ -102,11 +102,6 @@ export default function LoginPage() {
           </div>
         </div>
         <h1         className="text-2xl font-semibold tracking-tight text-cafe-espresso">Staff sign in</h1>
-        <p className="mt-2 text-sm leading-6 text-cafe-muted">
-          Sign in with the staff account created for you by your Supabase
-          project administrator.
-        </p>
-
         <form className="mt-7 space-y-5" onSubmit={signIn}>
           <div>
             <label

@@ -59,11 +59,11 @@ export async function POST(request: NextRequest) {
   if (typeof body !== "object" || body === null) {
     return NextResponse.json({ error: "Employee details are required." }, { status: 400 });
   }
-  const { fullName, role } = body as Record<string, unknown>;
-  const name = normalizeName(fullName);
+  const { username, role } = body as Record<string, unknown>;
+  const name = normalizeName(username);
   if (!name) {
     return NextResponse.json(
-      { error: "Enter a full name between 2 and 100 characters." },
+      { error: "Enter a username between 2 and 100 characters." },
       { status: 400 },
     );
   }

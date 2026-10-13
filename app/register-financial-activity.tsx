@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store-settings";
 
@@ -171,19 +170,18 @@ export default function RegisterFinancialActivity({
   const [errorMessage, setErrorMessage] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
+  const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [refundOrderId, setRefundOrderId] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
   const [refundReason, setRefundReason] = useState("");
-  const [managerEmail, setManagerEmail] = useState("");
-  const [managerPassword, setManagerPassword] = useState("");
+  const [managerPin, setManagerPin] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
 
   function closeRefundDialog() {
     if (isSaving) return;
     setIsRefundDialogOpen(false);
-    setManagerEmail("");
-    setManagerPassword("");
+    setManagerPin("");
     setErrorMessage("");
   }
 
@@ -218,68 +216,50 @@ export default function RegisterFinancialActivity({
       !Number.isFinite(amount) ||
       amount <= 0 ||
       !refundReason.trim() ||
-      !managerEmail.trim() ||
-      !managerPassword
+      !/^[0-9]{6}$/.test(managerPin)
     ) {
-      setErrorMessage(
-        "Complete the refund details and enter a manager or admin sign-in.",
-      );
+      setErrorMessage("Complete the refund details and enter a manager or admin six-digit PIN.");
       return;
     }
 
     setIsSaving(true);
     setErrorMessage("");
     setActionMessage("");
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    if (!supabaseUrl || !publishableKey) {
-      setErrorMessage("Supabase is not configured for refund approval.");
-      setIsSaving(false);
-      return;
-    }
-
-    const approver = createClient(supabaseUrl, publishableKey, {
-      auth: {
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-        persistSession: false,
-      },
-    });
     try {
-      const { error: signInError } = await approver.auth.signInWithPassword({
-        email: managerEmail.trim(),
-        password: managerPassword,
-      });
-      if (signInError) throw signInError;
-
-      const { error } = await approver.rpc(
-        "record_order_refund",
+      const { data, error } = await createSupabaseBrowserClient().rpc(
+        "approve_order_refund_with_pin",
         {
           p_order_id: refundOrderId,
           p_amount: Number(amount.toFixed(2)),
           p_reason: refundReason.trim(),
+          p_manager_pin: managerPin,
         },
       );
       if (error) throw error;
+      if (!isRecord(data) || typeof data.status !== "string") {
+        throw new Error("The refund service returned an invalid approval response.");
+      }
+      if (data.status === "invalid_pin") {
+        throw new Error(
+          `That PIN is not assigned to a Manager or Admin. ${String(data.attempts_remaining ?? 0)} attempts remain.`,
+        );
+      }
+      if (data.status === "locked") {
+        throw new Error("PIN entry is locked for 10 minutes after repeated incorrect attempts.");
+      }
+      if (data.status !== "refunded") {
+        throw new Error("The refund service returned an unknown approval status.");
+      }
       setRefundAmount("");
       setRefundReason("");
-      setManagerEmail("");
-      setManagerPassword("");
+      setManagerPin("");
       setIsRefundDialogOpen(false);
       setActionMessage("Refund recorded.");
       await refreshActivity();
     } catch (error) {
       setErrorMessage(describeError(error));
     } finally {
-      const { error: clearSessionError } = await approver.auth.signOut({
-        scope: "local",
-      });
-      if (clearSessionError) {
-        setErrorMessage(
-          `Could not clear the temporary approval session: ${describeError(clearSessionError)}`,
-        );
-      }
-      setManagerPassword("");
+      setManagerPin("");
       setIsSaving(false);
     }
   }
@@ -322,8 +302,37 @@ export default function RegisterFinancialActivity({
   return (
     <section
       aria-label="Register financial activity"
-      className="mx-auto grid max-w-[1440px] gap-6 px-5 pb-8 sm:px-8"
+      className="flex items-center"
     >
+      <button
+        type="button"
+        onClick={() => setIsActivityDialogOpen(true)}
+        className="rounded-lg border border-cafe-border bg-cafe-surface-soft px-3 py-2 text-sm font-medium text-cafe-espresso transition hover:border-cafe-sage hover:bg-cafe-accent-soft"
+      >
+        {role === "staff" ? "Recent transactions" : "Transactions & expenses"}
+      </button>
+      {isActivityDialogOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#241b15]/60 px-4 py-6">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="register-activity-dialog-title"
+            className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-cafe-border bg-cafe-cream shadow-2xl"
+          >
+            <header className="flex items-center justify-between gap-4 border-b border-cafe-border bg-cafe-card px-5 py-4">
+              <h2 id="register-activity-dialog-title" className="text-lg font-semibold text-cafe-espresso">
+                {role === "staff" ? "Recent transactions" : "Transactions & expenses"}
+              </h2>
+              <button
+                type="button"
+                aria-label="Close transactions and expenses"
+                onClick={() => setIsActivityDialogOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-cafe-border text-lg"
+              >
+                ×
+              </button>
+            </header>
+            <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
       {role !== "staff" && (
         <section
           aria-labelledby="register-financial-entry-heading"
@@ -479,6 +488,10 @@ export default function RegisterFinancialActivity({
           </p>
         )}
       </section>
+            </div>
+          </section>
+        </div>
+      )}
       {actionMessage && (
         <p
           role="status"
@@ -529,9 +542,10 @@ export default function RegisterFinancialActivity({
                 <h3 className="text-lg font-bold tracking-wide">
                   {settings.storeName}
                 </h3>
-                <p className="mt-1 text-sm">Point of sale receipt</p>
+                <p className="mt-1 text-sm">Sales Invoice</p>
                 {settings.address && <p className="mt-1 text-xs">{settings.address}</p>}
                 {settings.phone && <p className="mt-1 text-xs">{settings.phone}</p>}
+                {settings.vatTin && <p className="mt-1 text-xs">VAT REG TIN: {settings.vatTin}</p>}
                 <p className="mt-2 break-all text-xs">
                   Order: {selectedOrder.id}
                 </p>
@@ -570,10 +584,6 @@ export default function RegisterFinancialActivity({
                     <dd>−{formatCurrency(selectedOrder.discountAmount)}</dd>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <dt>Tax</dt>
-                  <dd>{formatCurrency(selectedOrder.tax)}</dd>
-                </div>
                 <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
                   <dt>Total</dt>
                   <dd>{formatCurrency(selectedOrder.total)}</dd>
@@ -639,10 +649,6 @@ export default function RegisterFinancialActivity({
                 >
                   Manager approval required
                 </h2>
-                <p className="mt-2 text-sm text-cafe-muted">
-                  Enter a Manager or Admin Supabase sign-in to authorize this
-                  refund. The cashier will stay signed in.
-                </p>
               </div>
               <button
                 type="button"
@@ -717,36 +723,23 @@ export default function RegisterFinancialActivity({
               </div>
               <div>
                 <label
-                  htmlFor="manager-approval-email"
+                  htmlFor="manager-approval-pin"
                   className="mb-1.5 block text-sm font-medium"
                 >
-                  Manager/Admin email
+                  Manager/Admin PIN
                 </label>
                 <input
-                  id="manager-approval-email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  value={managerEmail}
-                  onChange={(event) => setManagerEmail(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="manager-approval-password"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Manager/Admin password
-                </label>
-                <input
-                  id="manager-approval-password"
+                  id="manager-approval-pin"
                   type="password"
-                  autoComplete="current-password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
                   required
-                  value={managerPassword}
-                  onChange={(event) => setManagerPassword(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm"
+                  value={managerPin}
+                  onChange={(event) =>
+                    setManagerPin(event.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  className="h-11 w-full rounded-lg border border-cafe-border px-3 text-center text-lg tracking-[0.4em]"
                 />
               </div>
               {errorMessage && (
@@ -771,7 +764,7 @@ export default function RegisterFinancialActivity({
                   disabled={isSaving}
                   className="h-11 rounded-xl bg-cafe-sage-dark px-4 font-medium text-white disabled:opacity-50"
                 >
-                  {isSaving ? "Verifying and recording..." : "Approve refund"}
+                  {isSaving ? "Verifying PIN..." : "Approve refund"}
                 </button>
               </div>
             </form>

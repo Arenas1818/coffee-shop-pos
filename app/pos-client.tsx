@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store-settings";
@@ -56,8 +56,6 @@ type Receipt = {
   subtotal: number;
   discountType: DiscountType | null;
   discountAmount: number;
-  taxRate: number;
-  tax: number;
   total: number;
   paymentMethod: PaymentMethod;
   amountReceived: number;
@@ -66,7 +64,13 @@ type Receipt = {
   storeName: string;
   address: string;
   phone: string;
+  vatTin: string;
   receiptFooter: string;
+};
+
+type ProductAvailability = {
+  available: boolean;
+  unavailableIngredients: string[];
 };
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -149,6 +153,7 @@ export default function PosClient({
     error: storeSettingsError,
   } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
+  const [availability, setAvailability] = useState<Record<string, ProductAvailability>>({});
   const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [menuError, setMenuError] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("All");
@@ -167,6 +172,40 @@ export default function PosClient({
   const [attendanceError, setAttendanceError] = useState("");
   const [isPunchingAttendance, setIsPunchingAttendance] = useState(false);
 
+  const loadAvailability = useCallback(async () => {
+    const { data: rows, error } =
+      await createSupabaseBrowserClient().rpc("register_product_availability");
+    if (error) throw error;
+    if (!Array.isArray(rows)) {
+      throw new Error("Supabase returned invalid product availability.");
+    }
+    const nextAvailability: Record<string, ProductAvailability> = {};
+    for (const row of rows) {
+      if (
+        typeof row !== "object" ||
+        row === null ||
+        !("product_id" in row) ||
+        typeof row.product_id !== "string" ||
+        !("variant" in row) ||
+        (row.variant !== "regular" && row.variant !== "large") ||
+        !("is_available" in row) ||
+        typeof row.is_available !== "boolean" ||
+        !("unavailable_ingredients" in row) ||
+        !Array.isArray(row.unavailable_ingredients) ||
+        !row.unavailable_ingredients.every(
+          (name: unknown) => typeof name === "string",
+        )
+      ) {
+        throw new Error("Supabase returned invalid product availability.");
+      }
+      nextAvailability[`${row.product_id}:${row.variant}`] = {
+        available: row.is_available,
+        unavailableIngredients: row.unavailable_ingredients,
+      };
+    }
+    setAvailability(nextAvailability);
+  }, []);
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -181,6 +220,7 @@ export default function PosClient({
 
         if (error) throw error;
         const menu = parseProducts(data);
+        await loadAvailability();
         if (isCurrent) setProducts(menu);
       } catch (error) {
         if (isCurrent) setMenuError(describeError(error));
@@ -193,7 +233,7 @@ export default function PosClient({
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [loadAvailability]);
 
   const visibleProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -223,11 +263,7 @@ export default function PosClient({
       ? 0
       : Math.round((subtotal * 0.1 + Number.EPSILON) * 100) / 100;
   const discountedSubtotal = subtotal - discountAmount;
-  const tax =
-    Math.round(
-      (discountedSubtotal * (settings.taxRate / 100) + Number.EPSILON) * 100,
-    ) / 100;
-  const total = discountedSubtotal + tax;
+  const total = discountedSubtotal;
   const cashAmountReceived = Number(amountReceived);
   const isPaymentValid =
     paymentMethod !== "cash" ||
@@ -242,6 +278,10 @@ export default function PosClient({
     Boolean(storeSettingsError);
 
   function addToCart(product: Product, size: "regular" | "large" = "regular") {
+    if (!availability[`${product.id}:${size}`]?.available) {
+      setOrderError("That product size is unavailable because an ingredient is out of stock.");
+      return;
+    }
     setOrderError("");
     setCart((currentCart) => {
       const existingItem = currentCart.find(
@@ -273,6 +313,11 @@ export default function PosClient({
     setCart(nextCart);
     if (nextCart.length === 0) {
       setDiscountType(null);
+      void loadAvailability().catch((error: unknown) =>
+        setMenuError(
+          `Could not refresh stock availability: ${describeError(error)}`,
+        ),
+      );
     }
   }
 
@@ -318,8 +363,6 @@ export default function PosClient({
         subtotal,
         discountType,
         discountAmount,
-        taxRate: settings.taxRate,
-        tax,
         total,
         paymentMethod,
         amountReceived: paymentReceived,
@@ -332,6 +375,7 @@ export default function PosClient({
         storeName: settings.storeName,
         address: settings.address,
         phone: settings.phone,
+        vatTin: settings.vatTin,
         receiptFooter: settings.receiptFooter,
       });
       setCart([]);
@@ -425,7 +469,7 @@ export default function PosClient({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {role !== "staff" && (
               <Link
                 href="/dashboard"
@@ -434,6 +478,7 @@ export default function PosClient({
                 Management
               </Link>
             )}
+            <RegisterFinancialActivity role={role} />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{email}</p>
               <p className="text-xs capitalize text-cafe-muted">{role}</p>
@@ -546,16 +591,27 @@ export default function PosClient({
             </p>
           ) : visibleProducts.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleProducts.map((product) => (
+              {visibleProducts.map((product) => {
+                const regularAvailability = availability[`${product.id}:regular`];
+                const largeAvailability = availability[`${product.id}:large`];
+                const isUnavailable =
+                  !regularAvailability?.available &&
+                  (product.largePrice === null || !largeAvailability?.available);
+                const unavailableIngredients = [
+                  ...(regularAvailability?.unavailableIngredients ?? []),
+                  ...(largeAvailability?.unavailableIngredients ?? []),
+                ].filter((name, index, names) => names.indexOf(name) === index);
+                return (
                 <button
                   key={product.id}
                   type="button"
+                  disabled={isUnavailable}
                   onClick={() =>
                     product.largePrice === null
-                      ? addToCart(product)
+                      ? regularAvailability?.available && addToCart(product)
                       : setSizeSelection(product)
                   }
-                  className="group min-h-64 rounded-2xl border border-cafe-border bg-cafe-card p-3 text-left shadow-[0_3px_14px_rgba(74,52,40,0.035)] transition hover:-translate-y-0.5 hover:border-[#bdc6b5] hover:shadow-[0_10px_24px_rgba(74,52,40,0.1)]"
+                  className="group min-h-64 rounded-2xl border border-cafe-border bg-cafe-card p-3 text-left shadow-[0_3px_14px_rgba(74,52,40,0.035)] transition hover:-translate-y-0.5 hover:border-[#bdc6b5] hover:shadow-[0_10px_24px_rgba(74,52,40,0.1)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
                 >
                   <div
                     className={`flex h-32 items-center justify-center rounded-xl text-5xl ${productColors[product.color]}`}
@@ -563,6 +619,16 @@ export default function PosClient({
                   >
                     {product.icon}
                   </div>
+                  {isUnavailable && (
+                    <span className="mt-2 inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800">
+                      Unavailable{unavailableIngredients.length ? ` · ${unavailableIngredients.join(", ")} out of stock` : ""}
+                    </span>
+                  )}
+                  {!isUnavailable && unavailableIngredients.length > 0 && (
+                    <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
+                      Some sizes unavailable
+                    </span>
+                  )}
                   <div className="flex items-start justify-between gap-2 px-1 pb-1 pt-4">
                     <div>
                       <h2 className="font-semibold">{product.name}</h2>
@@ -580,7 +646,8 @@ export default function PosClient({
                     + Add to order
                   </p>
                 </button>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-[#d3c7b8] bg-cafe-card px-6 py-12 text-center">
@@ -706,10 +773,6 @@ export default function PosClient({
                 <span>{formatCurrency(discountedSubtotal)}</span>
               </div>
             )}
-            <div className="flex justify-between text-cafe-muted">
-              <span>Estimated tax ({settings.taxRate}% after discount)</span>
-              <span>{formatCurrency(tax)}</span>
-            </div>
             <div className="flex justify-between pt-1 text-base font-semibold">
               <span>Total</span>
               <span>{formatCurrency(total)}</span>
@@ -820,7 +883,6 @@ export default function PosClient({
           </button>
         </div>
       )}
-      <RegisterFinancialActivity role={role} />
       {receipt && (
         <div className="receipt-overlay fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-[#241b15]/60 px-4 py-8">
           <section
@@ -852,9 +914,10 @@ export default function PosClient({
                 <h3 className="text-lg font-bold tracking-wide">
                   {receipt.storeName}
                 </h3>
-                <p className="mt-1 text-sm">Point of sale receipt</p>
+                <p className="mt-1 text-sm">Sales Invoice</p>
                 {receipt.address && <p className="mt-1 text-xs">{receipt.address}</p>}
                 {receipt.phone && <p className="mt-1 text-xs">{receipt.phone}</p>}
+                {receipt.vatTin && <p className="mt-1 text-xs">VAT REG TIN: {receipt.vatTin}</p>}
                 <p className="mt-2 break-all text-xs">
                   Order: {receipt.orderId}
                 </p>
@@ -902,10 +965,6 @@ export default function PosClient({
                     </dd>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <dt>Tax ({receipt.taxRate}% after discount)</dt>
-                  <dd>{formatCurrency(receipt.tax)}</dd>
-                </div>
                 <div className="flex justify-between border-t border-[#bdb6aa] pt-3 text-base font-bold">
                   <dt>Total</dt>
                   <dd>{formatCurrency(receipt.total)}</dd>
@@ -1059,13 +1118,18 @@ export default function PosClient({
             <div className="grid gap-3">
               <button
                 type="button"
+                disabled={!availability[`${sizeSelection.id}:regular`]?.available}
                 onClick={() => {
                   addToCart(sizeSelection, "regular");
                   setSizeSelection(null);
                 }}
-                className="flex items-center justify-between rounded-xl border border-cafe-border px-4 py-4 text-left transition hover:border-cafe-sage hover:bg-[#f3f4ed]"
+                className="flex items-center justify-between rounded-xl border border-cafe-border px-4 py-4 text-left transition hover:border-cafe-sage hover:bg-[#f3f4ed] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <span className="font-medium">Regular</span>
+                <span className="font-medium">
+                  Regular
+                  {!availability[`${sizeSelection.id}:regular`]?.available &&
+                    ` · Unavailable${availability[`${sizeSelection.id}:regular`]?.unavailableIngredients.length ? ` — ${availability[`${sizeSelection.id}:regular`]?.unavailableIngredients.join(", ")} out of stock` : ""}`}
+                </span>
                 <span className="font-semibold text-cafe-espresso">
                   {formatCurrency(sizeSelection.price)}
                 </span>
@@ -1073,13 +1137,18 @@ export default function PosClient({
               {sizeSelection.largePrice !== null && (
                 <button
                   type="button"
+                  disabled={!availability[`${sizeSelection.id}:large`]?.available}
                   onClick={() => {
                     addToCart(sizeSelection, "large");
                     setSizeSelection(null);
                   }}
-                  className="flex items-center justify-between rounded-xl border border-cafe-border px-4 py-4 text-left transition hover:border-cafe-sage hover:bg-[#f3f4ed]"
+                  className="flex items-center justify-between rounded-xl border border-cafe-border px-4 py-4 text-left transition hover:border-cafe-sage hover:bg-[#f3f4ed] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className="font-medium">Large</span>
+                  <span className="font-medium">
+                    Large
+                    {!availability[`${sizeSelection.id}:large`]?.available &&
+                      ` · Unavailable${availability[`${sizeSelection.id}:large`]?.unavailableIngredients.length ? ` — ${availability[`${sizeSelection.id}:large`]?.unavailableIngredients.join(", ")} out of stock` : ""}`}
+                  </span>
                   <span className="font-semibold text-cafe-espresso">
                     {formatCurrency(sizeSelection.largePrice)}
                   </span>

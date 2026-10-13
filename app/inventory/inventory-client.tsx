@@ -1,11 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import ManagementSidebar from "../management-sidebar";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useStoreSettings } from "@/lib/store-settings";
 
-type Product = { id: string; name: string; large_price: number | null };
 type InventoryItem = {
   id: string;
   name: string;
@@ -34,7 +33,6 @@ const initialForm = {
   low_stock_threshold: "0",
 };
 
-type RecipeRow = { inventoryItemId: string; quantity: string };
 type SupplyEdit = {
   name: string;
   unit: string;
@@ -74,7 +72,6 @@ export default function InventoryClient({
 }) {
   const { settings, formatCurrency } = useStoreSettings();
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState(initialForm);
   const [restockAmounts, setRestockAmounts] = useState<Record<string, string>>(
     {},
@@ -97,28 +94,15 @@ export default function InventoryClient({
   const [busyId, setBusyId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [notice, setNotice] = useState("");
-  const [recipeProductId, setRecipeProductId] = useState("");
-  const [recipeVariant, setRecipeVariant] = useState<"regular" | "large">(
-    "regular",
-  );
-  const [recipeRows, setRecipeRows] = useState<RecipeRow[]>([]);
-  const [isLoadingRecipe, setIsLoadingRecipe] = useState(false);
-  const [isSavingRecipe, setIsSavingRecipe] = useState(false);
-  const recipeLoadVersion = useRef(0);
 
   const loadData = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
-    const [inventoryResult, productResult] = await Promise.all([
-      supabase
-        .from("inventory_items")
-        .select("id, name, item_type, product_id, unit, unit_cost, quantity, low_stock_threshold, active")
-        .order("name"),
-      supabase.from("products").select("id, name, large_price").eq("active", true).order("name"),
-    ]);
+    const inventoryResult = await supabase
+      .from("inventory_items")
+      .select("id, name, item_type, product_id, unit, unit_cost, quantity, low_stock_threshold, active")
+      .order("name");
     if (inventoryResult.error) throw inventoryResult.error;
-    if (productResult.error) throw productResult.error;
     setItems((inventoryResult.data ?? []) as InventoryItem[]);
-    setProducts((productResult.data ?? []) as Product[]);
   }, []);
 
   useEffect(() => {
@@ -326,111 +310,6 @@ export default function InventoryClient({
     }
   }
 
-  const loadRecipe = useCallback(async (
-    productId: string,
-    variant: "regular" | "large",
-  ) => {
-    const version = ++recipeLoadVersion.current;
-    if (!productId) {
-      setRecipeRows([]);
-      setIsLoadingRecipe(false);
-      return;
-    }
-    setIsLoadingRecipe(true);
-    setErrorMessage("");
-    try {
-      const { data, error } = await createSupabaseBrowserClient().rpc(
-        "list_product_recipes",
-      );
-      if (error) throw error;
-      if (!Array.isArray(data)) {
-        throw new Error("Supabase returned an invalid product recipe list.");
-      }
-      const rows = data
-        .filter(
-          (entry) =>
-            typeof entry === "object" &&
-            entry !== null &&
-            "product_id" in entry &&
-            entry.product_id === productId &&
-            "variant" in entry &&
-            entry.variant === variant,
-        )
-        .map((entry) => {
-          if (
-            typeof entry !== "object" ||
-            entry === null ||
-            !("inventory_item_id" in entry) ||
-            typeof entry.inventory_item_id !== "string" ||
-            !("quantity_per_product" in entry)
-          ) {
-            throw new Error("Supabase returned an invalid recipe ingredient.");
-          }
-          return {
-            inventoryItemId: entry.inventory_item_id,
-            quantity: String(entry.quantity_per_product),
-          };
-        });
-      if (recipeLoadVersion.current === version) setRecipeRows(rows);
-    } catch (error) {
-      if (recipeLoadVersion.current === version) {
-        setErrorMessage(`Could not load product recipe: ${errorText(error)}`);
-      }
-    } finally {
-      if (recipeLoadVersion.current === version) setIsLoadingRecipe(false);
-    }
-  }, []);
-
-  async function saveRecipe(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!recipeProductId) {
-      setErrorMessage("Choose a menu product for the recipe.");
-      return;
-    }
-    const ingredients = recipeRows.map((row) => ({
-      inventory_item_id: row.inventoryItemId,
-      quantity: Number(row.quantity),
-    }));
-    if (
-      ingredients.some(
-        (ingredient) =>
-          !ingredient.inventory_item_id ||
-          !Number.isFinite(ingredient.quantity) ||
-          ingredient.quantity <= 0,
-      )
-    ) {
-      setErrorMessage("Choose an ingredient and enter a positive quantity for every recipe row.");
-      return;
-    }
-    setIsSavingRecipe(true);
-    setErrorMessage("");
-    setNotice("");
-    try {
-      const { error } = await createSupabaseBrowserClient().rpc(
-        "save_product_recipe",
-        {
-          p_product_id: recipeProductId,
-          p_variant: recipeVariant,
-          p_ingredients: ingredients,
-        },
-      );
-      if (error) throw error;
-      setNotice("Product recipe saved. Orders will use its ingredient quantities.");
-      await loadRecipe(recipeProductId, recipeVariant);
-      try {
-        await loadData();
-      } catch (error) {
-        setErrorMessage(
-          `Recipe saved, but inventory data could not be refreshed: ${errorText(error)}`,
-        );
-      }
-    } catch (error) {
-      setErrorMessage(`Could not save product recipe: ${errorText(error)}`);
-    } finally {
-      setIsSavingRecipe(false);
-    }
-  }
-
   async function toggleActive(item: InventoryItem) {
     setBusyId(item.id);
     setErrorMessage("");
@@ -476,9 +355,6 @@ export default function InventoryClient({
   const lowStockItems = activeSupplies.filter(
     (item) => item.quantity <= effectiveThreshold(item),
   );
-  const selectedRecipeProduct = products.find(
-    (product) => product.id === recipeProductId,
-  );
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-5 px-5 py-5 sm:px-8 lg:min-h-screen lg:flex-row lg:gap-0 lg:px-0 lg:py-0">
@@ -492,8 +368,7 @@ export default function InventoryClient({
               Inventory
             </h1>
             <p className="mt-2 text-sm text-cafe-muted">
-              Track supply quantities and costs here. Use product recipes to
-              set how much of each supply a menu item uses.
+              Add supplies and manage stock levels, costs, and activity.
             </p>
           </header>
 
@@ -593,150 +468,6 @@ export default function InventoryClient({
                   {isSaving ? "Saving..." : "Add supply"}
                 </button>
               </div>
-            </form>
-          </section>
-
-          <section
-            aria-labelledby="recipe-heading"
-            className="mb-7 rounded-2xl border border-cafe-border bg-cafe-card p-5 sm:p-7"
-          >
-            <h2 id="recipe-heading" className="text-lg font-semibold text-cafe-espresso">
-              Product recipes
-            </h2>
-            <p className="mt-1 text-sm text-cafe-muted">
-              Set the ingredients and quantity used for one drink. Orders deduct recipe ingredients instead of the finished-product stock. Enter each ingredient in the same unit used by its inventory item.
-            </p>
-            <form className="mt-5 space-y-4" onSubmit={(event) => void saveRecipe(event)}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="recipe-product" className="mb-1.5 block text-sm font-medium">Menu product</label>
-                  <select
-                    id="recipe-product"
-                    value={recipeProductId}
-                    onChange={(event) => {
-                      const productId = event.target.value;
-                      setRecipeProductId(productId);
-                      setRecipeVariant("regular");
-                      void loadRecipe(productId, "regular");
-                    }}
-                    className="h-11 w-full rounded-lg border border-cafe-border bg-white px-3 text-sm"
-                  >
-                    <option value="">Choose product</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>{product.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="recipe-variant" className="mb-1.5 block text-sm font-medium">Drink size</label>
-                  <select
-                    id="recipe-variant"
-                    value={recipeVariant}
-                    onChange={(event) => {
-                      const variant = event.target.value as "regular" | "large";
-                      setRecipeVariant(variant);
-                      void loadRecipe(recipeProductId, variant);
-                    }}
-                    disabled={
-                      selectedRecipeProduct?.large_price === null ||
-                      selectedRecipeProduct?.large_price === undefined
-                    }
-                    className="h-11 w-full rounded-lg border border-cafe-border bg-white px-3 text-sm disabled:bg-[#f3eee5]"
-                  >
-                    <option value="regular">Regular</option>
-                    {selectedRecipeProduct?.large_price !== null &&
-                      selectedRecipeProduct?.large_price !== undefined && (
-                        <option value="large">Large</option>
-                      )}
-                  </select>
-                </div>
-              </div>
-              {selectedRecipeProduct?.large_price !== null &&
-                selectedRecipeProduct?.large_price !== undefined && (
-                  <p className="text-xs text-cafe-muted">
-                    If no Large-specific recipe is saved, Large orders use the Regular recipe.
-                  </p>
-                )}
-              {!recipeProductId ? (
-                <p className="rounded-lg bg-[#f8f4ec] p-4 text-sm text-cafe-muted">
-                  Choose a menu product to view or edit its recipe.
-                </p>
-              ) : isLoadingRecipe ? (
-                <p role="status" className="rounded-lg bg-[#f8f4ec] p-4 text-sm text-cafe-muted">
-                  Loading recipe...
-                </p>
-              ) : (
-                <>
-                  {recipeRows.length > 0 && (
-                    <div className="space-y-2">
-                      {recipeRows.map((row, index) => {
-                        const supply = activeSupplies.find(
-                          (item) => item.id === row.inventoryItemId,
-                        );
-                        return (
-                          <div key={`${recipeProductId}-${recipeVariant}-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
-                            <label className="sr-only" htmlFor={`recipe-item-${index}`}>Ingredient {index + 1}</label>
-                            <select
-                              id={`recipe-item-${index}`}
-                              required
-                              value={row.inventoryItemId}
-                              onChange={(event) => setRecipeRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, inventoryItemId: event.target.value } : item))}
-                              className="h-10 rounded-lg border border-cafe-border bg-white px-3 text-sm"
-                            >
-                              <option value="">Choose supply</option>
-                              {activeSupplies.map((item) => (
-                                <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>
-                              ))}
-                            </select>
-                            <label className="sr-only" htmlFor={`recipe-quantity-${index}`}>Ingredient quantity per drink</label>
-                            <input
-                              id={`recipe-quantity-${index}`}
-                              required
-                              type="number"
-                              min="0.001"
-                              step="0.001"
-                              value={row.quantity}
-                              onChange={(event) => setRecipeRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: event.target.value } : item))}
-                              placeholder={supply ? `Quantity (${supply.unit})` : "Quantity per drink"}
-                              className="h-10 rounded-lg border border-cafe-border px-3 text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setRecipeRows((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                              className="h-10 rounded-lg border border-black bg-black px-3 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333]"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setRecipeRows((current) => [...current, { inventoryItemId: "", quantity: "1" }])}
-                      disabled={activeSupplies.length === 0}
-                      className="h-10 rounded-lg border border-black bg-black px-4 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Add ingredient
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSavingRecipe || isLoadingRecipe || !recipeProductId}
-                      className="h-10 rounded-lg border border-black bg-black px-4 text-sm font-medium text-white hover:bg-[#333] hover:border-[#333] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSavingRecipe ? "Saving..." : "Save recipe"}
-                    </button>
-                    {recipeRows.length === 0 && (
-                      <span className="text-xs text-cafe-muted">No recipe rows: orders continue deducting the finished product unit.</span>
-                    )}
-                  </div>
-                  {activeSupplies.length === 0 && (
-                    <p className="text-xs text-[#9a5143]">Add active supply inventory items before creating a recipe.</p>
-                  )}
-                </>
-              )}
             </form>
           </section>
 

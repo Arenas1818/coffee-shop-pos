@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 type StaffRole = "staff" | "manager" | "admin";
 type Employee = {
   user_id: string;
+  full_name: string | null;
   email: string;
   role: StaffRole;
   created_at: string;
@@ -33,7 +34,7 @@ export default function EmployeesClient({
   currentUserId: string;
 }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [userId, setUserId] = useState("");
+  const [fullName, setFullName] = useState("");
   const [newRole, setNewRole] = useState<StaffRole>("staff");
   const [roleEdits, setRoleEdits] = useState<Record<string, StaffRole>>({});
   const [pinEdits, setPinEdits] = useState<Record<string, string>>({});
@@ -77,24 +78,40 @@ export default function EmployeesClient({
 
   async function saveEmployee(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const id = userId.trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-      setErrorMessage("Enter a valid Supabase Auth user UUID.");
+    if (fullName.trim().length < 2) {
+      setErrorMessage("Enter the employee's full name.");
       return;
     }
     setIsSaving(true);
     setErrorMessage("");
     setNotice("");
     try {
-      const { error } = await createSupabaseBrowserClient().rpc(
-        "save_staff_member",
-        { p_user_id: id, p_role: newRole },
-      );
-      if (error) throw error;
+      const response = await fetch("/api/employees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, role: newRole }),
+      });
+      const result: unknown = await response.json();
+      if (
+        typeof result !== "object" ||
+        result === null ||
+        !("email" in result) ||
+        typeof result.email !== "string"
+      ) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "error" in result &&
+          typeof result.error === "string"
+            ? result.error
+            : "The server returned an invalid employee response.";
+        throw new Error(message);
+      }
+      const generatedEmail = result.email;
       await loadEmployees();
-      setUserId("");
+      setFullName("");
       setNewRole("staff");
-      setNotice("Employee access saved.");
+      setNotice(`Employee added as ${generatedEmail}. Assign their attendance PIN below.`);
     } catch (error) {
       setErrorMessage(`Could not save employee: ${errorText(error)}`);
     } finally {
@@ -189,14 +206,14 @@ export default function EmployeesClient({
           {notice && <p role="status" className="mb-5 rounded-xl bg-[#edf1e8] px-4 py-3 text-sm text-cafe-sage-dark">{notice}</p>}
 
           <section className="mb-7 rounded-2xl border border-cafe-border bg-cafe-card p-5 sm:p-7">
-            <h2 className="text-lg font-semibold text-cafe-espresso">Add existing Supabase user</h2>
+            <h2 className="text-lg font-semibold text-cafe-espresso">Add employee</h2>
             <p className="mt-1 text-sm text-cafe-muted">
-              First create the account in Supabase Authentication → Users, then add its user ID here.
+              Enter their full name. A unique <span className="font-medium">@kpnnmn.com</span> Auth account is created automatically; its random password is not shared because attendance uses a separate PIN.
             </p>
             <form className="mt-5 grid gap-4 sm:grid-cols-[minmax(220px,1fr)_180px_auto]" onSubmit={saveEmployee}>
               <div>
-                <label htmlFor="employee-user-id" className="mb-1.5 block text-sm font-medium">Supabase Auth user ID</label>
-                <input id="employee-user-id" required value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="UUID from Authentication → Users" className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm" />
+                <label htmlFor="employee-full-name" className="mb-1.5 block text-sm font-medium">Full name</label>
+                <input id="employee-full-name" required minLength={2} maxLength={100} autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Employee full name" className="h-11 w-full rounded-lg border border-cafe-border px-3 text-sm" />
               </div>
               <div>
                 <label htmlFor="employee-role" className="mb-1.5 block text-sm font-medium">Role</label>
@@ -222,8 +239,8 @@ export default function EmployeesClient({
                 {employees.map((employee) => (
                   <li key={employee.user_id} className="flex flex-wrap items-center justify-between gap-4 py-4">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{employee.email}{employee.user_id === currentUserId && <span className="ml-2 text-xs font-normal text-cafe-muted">You</span>}</p>
-                      <p className="mt-1 text-xs capitalize text-cafe-muted">{employee.role}</p>
+                      <p className="truncate font-medium">{employee.full_name || employee.email}{employee.user_id === currentUserId && <span className="ml-2 text-xs font-normal text-cafe-muted">You</span>}</p>
+                      <p className="mt-1 text-xs text-cafe-muted">{employee.email} · <span className="capitalize">{employee.role}</span></p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {role === "admin" ? (

@@ -10,8 +10,10 @@ printable receipt.
 1. Install dependencies with `npm.cmd install`.
 2. Copy `.env.example` to `.env.local`.
 3. Set `NEXT_PUBLIC_SUPABASE_URL` and
-   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`. Use the project's
-   publishable key, never a secret or service-role key.
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`. To create employee
+   Auth accounts from the Employees page, also set `SUPABASE_SERVICE_ROLE_KEY`
+   using the project's server-side service role key. Never prefix this secret
+   with `NEXT_PUBLIC_`, expose it to browser code, or commit its value.
 4. In the Supabase SQL Editor, run the migrations in order:
    - `supabase/migrations/20261012110000_create_pos_tables.sql`
    - `supabase/migrations/20261012120000_require_staff_auth.sql`
@@ -38,6 +40,7 @@ printable receipt.
    - `supabase/migrations/20261013001000_landing_background_video.sql`
    - `supabase/migrations/20261013001100_combined_pwd_senior_discount.sql`
    - `supabase/migrations/20261013001200_staff_pin_attendance.sql`
+   - `supabase/migrations/20261013001300_employee_full_name.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -48,9 +51,9 @@ printable receipt.
    values ('00000000-0000-0000-0000-000000000000');
    ```
 
-   Repeat these steps for each staff account. Only allowlisted accounts can
-   access the POS or place orders. Existing staff are assigned the `staff`
-   role by default. Promote menu managers using the next step.
+   Only allowlisted accounts can access the POS or place orders. Existing staff
+   are assigned the `staff` role by default. Promote menu managers using the
+   next step.
 7. In the Supabase SQL Editor, promote approved managers (replace the email
    with the account's email):
 
@@ -70,7 +73,15 @@ printable receipt.
    [http://localhost:3000](http://localhost:3000).
 
 Managers and admins can use the management sidebar for the dashboard,
-sales reports, inventory, products, customers, employees, and Settings.
+sales reports, inventory, products, customers, employees, and Settings. In Employees, managers can create Auth users by entering a full
+name. The app creates a unique `<name>@kpnnmn.com` account with a random,
+unshared password, and grants it the selected POS role. These generated
+accounts are for employee identity and attendance PIN ownership; staff clock
+in/out with their separate six-digit attendance PIN while the shared cashier
+remains signed in. The server-side `SUPABASE_SERVICE_ROLE_KEY` is required for
+this account-creation flow and must also be configured as a secret in the
+deployment environment. Generated addresses do not receive email, so do not
+use these accounts for normal email/password login or password recovery.
 Settings controls store name, address, phone, receipt footer, tax rate,
 currency symbol, global low-stock threshold fallback, and the optional landing
 video upload. The uploaded MP4 or WebM video is stored in Supabase Storage,

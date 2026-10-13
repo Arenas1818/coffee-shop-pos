@@ -161,6 +161,11 @@ export default function PosClient({
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [orderError, setOrderError] = useState("");
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attendancePin, setAttendancePin] = useState("");
+  const [attendanceMessage, setAttendanceMessage] = useState("");
+  const [attendanceError, setAttendanceError] = useState("");
+  const [isPunchingAttendance, setIsPunchingAttendance] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -352,6 +357,57 @@ export default function PosClient({
     );
   }
 
+  async function punchAttendance(action: "clock_in" | "clock_out") {
+    if (!/^[0-9]{6}$/.test(attendancePin)) {
+      setAttendanceError("Enter the employee's six-digit attendance PIN.");
+      return;
+    }
+    setIsPunchingAttendance(true);
+    setAttendanceError("");
+    setAttendanceMessage("");
+    try {
+      const { data, error } = await createSupabaseBrowserClient().rpc(
+        "punch_attendance",
+        { p_pin: attendancePin, p_action: action },
+      );
+      if (error) throw error;
+      if (typeof data !== "object" || data === null || !("status" in data)) {
+        throw new Error("The attendance response was invalid.");
+      }
+      const result = data as Record<string, unknown>;
+      const employee =
+        typeof result.staff_email === "string" ? result.staff_email : "Employee";
+      const retryAt =
+        typeof result.retry_after === "string"
+          ? new Date(result.retry_after).getTime()
+          : Number.NaN;
+      const retryMinutes = Number.isFinite(retryAt)
+        ? Math.max(1, Math.ceil((retryAt - Date.now()) / 60_000))
+        : 10;
+      const messages: Record<string, string> = {
+        clocked_in: `${employee} is clocked in.`,
+        clocked_out: `${employee} is clocked out.`,
+        already_clocked_in: `${employee} already has an open shift.`,
+        not_clocked_in: `${employee} does not have an open shift to clock out.`,
+        invalid_pin: `PIN not recognized. ${String(result.attempts_remaining ?? 0)} attempts remain before a 10-minute lockout.`,
+        locked: `Attendance PIN entry is temporarily locked. Try again in about ${retryMinutes} minute${retryMinutes === 1 ? "" : "s"}.`,
+      };
+      if (typeof result.status !== "string" || !messages[result.status]) {
+        throw new Error("The attendance service returned an unknown result.");
+      }
+      if (result.status === "invalid_pin" || result.status === "locked") {
+        setAttendanceError(messages[result.status]);
+      } else {
+        setAttendanceMessage(messages[result.status]);
+      }
+      setAttendancePin("");
+    } catch (error) {
+      setAttendanceError(`Could not record attendance: ${describeError(error)}`);
+    } finally {
+      setIsPunchingAttendance(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-cafe-cream text-[#342a22]">
       <header className="border-b border-cafe-border bg-cafe-card shadow-[0_2px_12px_rgba(16,42,67,0.06)]">
@@ -411,6 +467,18 @@ export default function PosClient({
             <p className="mt-2 text-sm text-[#d8e4e9]">
               What can we make for you today?
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                setAttendanceOpen(true);
+                setAttendancePin("");
+                setAttendanceError("");
+                setAttendanceMessage("");
+              }}
+              className="mt-5 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Staff clock in / out
+            </button>
           </div>
 
           <label className="mb-5 flex h-12 max-w-xl items-center gap-3 rounded-xl border border-cafe-border bg-cafe-card px-4 text-cafe-muted shadow-[0_2px_10px_rgba(74,52,40,0.03)] focus-within:border-cafe-sage">
@@ -877,6 +945,80 @@ export default function PosClient({
                 Done
               </button>
             </div>
+          </section>
+        </div>
+      )}
+      {attendanceOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#241b15]/50 px-5 py-8"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isPunchingAttendance) {
+              setAttendanceOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attendance-title"
+            className="w-full max-w-md rounded-2xl border border-cafe-border bg-cafe-card p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <h2 id="attendance-title" className="text-xl font-semibold text-cafe-espresso">
+                  Staff clock in / out
+                </h2>
+                <p className="mt-1 text-sm text-cafe-muted">
+                  Enter your attendance PIN. This will not change the signed-in cashier.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close attendance"
+                disabled={isPunchingAttendance}
+                onClick={() => setAttendanceOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-cafe-border hover:bg-[#eee5d7] disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+            {attendanceError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{attendanceError}</p>}
+            {attendanceMessage && <p role="status" className="mb-4 rounded-lg bg-[#edf1e8] px-3 py-2 text-sm text-cafe-sage-dark">{attendanceMessage}</p>}
+            <label htmlFor="attendance-pin" className="mb-1.5 block text-sm font-medium">Six-digit PIN</label>
+            <input
+              id="attendance-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={6}
+              value={attendancePin}
+              onChange={(event) => setAttendancePin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void punchAttendance("clock_in");
+              }}
+              className="h-12 w-full rounded-lg border border-cafe-border bg-white px-4 text-center text-xl tracking-[0.45em]"
+            />
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={isPunchingAttendance || attendancePin.length !== 6}
+                onClick={() => void punchAttendance("clock_in")}
+                className="h-11 rounded-xl bg-cafe-sage-dark px-4 text-sm font-semibold text-white hover:bg-[#43563d] disabled:opacity-50"
+              >
+                {isPunchingAttendance ? "Recording..." : "Clock in"}
+              </button>
+              <button
+                type="button"
+                disabled={isPunchingAttendance || attendancePin.length !== 6}
+                onClick={() => void punchAttendance("clock_out")}
+                className="h-11 rounded-xl border border-cafe-border px-4 text-sm font-semibold hover:bg-cafe-surface-soft disabled:opacity-50"
+              >
+                Clock out
+              </button>
+            </div>
+            <p className="mt-4 text-xs leading-5 text-cafe-muted">
+              PINs are for attendance only. After five incorrect attempts on this signed-in POS account, entry is locked for 10 minutes.
+            </p>
           </section>
         </div>
       )}

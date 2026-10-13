@@ -37,6 +37,7 @@ printable receipt.
    - `supabase/migrations/20261013000900_store_settings.sql`
    - `supabase/migrations/20261013001000_landing_background_video.sql`
    - `supabase/migrations/20261013001100_combined_pwd_senior_discount.sql`
+   - `supabase/migrations/20261013001200_staff_pin_attendance.sql`
 5. In the Supabase dashboard, create a staff user under **Authentication →
    Users**. Copy that user's UUID.
 6. Add the user to the staff allowlist in the SQL Editor, replacing the value
@@ -114,7 +115,16 @@ Regular recipe when no Large-specific recipe is saved. Ingredient cost is
 snapshotted on every order so daily cost reports use the cost known at the time
 of sale. To add an employee, first create their Auth
 account in Supabase, then use the Employees page with that account's user ID.
-Managers can manage regular staff; only admins can assign elevated roles.
+Managers can manage regular staff; only admins can assign elevated roles. Managers
+and admins can set or reset each employee's six-digit attendance-only PIN on the
+Employees page. Staff enter that PIN at the shared register to clock in or out;
+it never switches or signs in the POS cashier account. PINs are stored as salted
+hashes, and five incorrect attempts from one signed-in POS account trigger a
+10-minute lockout. Managers can view Manila-time shifts and export attendance
+CSV from the Attendance workspace. Employees with an open shift cannot have
+their POS access removed until they are clocked out. Attendance records are not
+payroll calculations; review and correct them using your established payroll
+process.
 The KAPE NA NAMAN menu migration archives the previous sample products,
 installs the requested PHP menu and prices, and supports Regular/Large drink
 variants in POS orders. The Non-Coffee menu migration adds the Non-Coffee

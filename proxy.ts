@@ -40,6 +40,7 @@ export async function proxy(request: NextRequest) {
     "/inventory",
     "/customers",
     "/employees",
+    "/attendance",
   ].some(
     (path) =>
       request.nextUrl.pathname === path ||

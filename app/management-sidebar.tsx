@@ -10,6 +10,7 @@ const managementLinks = [
   { href: "/menu", label: "Products", icon: "☕" },
   { href: "/customers", label: "Customers", icon: "♙" },
   { href: "/employees", label: "Employees", icon: "♧" },
+  { href: "/attendance", label: "Attendance", icon: "◷" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
